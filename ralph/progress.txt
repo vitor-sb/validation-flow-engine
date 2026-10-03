@@ -15,3 +15,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - ArchUnit rules use allowEmptyShould(true) because domain/application have no classes yet; remove if it hides problems later
   - Full-context tests with Postgres (US-002+) need Docker; they could not be verified in this environment
 ---
+## 2026-10-03 - US-002
+- Flyway migration V1__initial_schema.sql: flow_definition, flow_execution, node_execution, execution_audit_log, idempotency_key (all with tenant_id, JSONB variable fields, UNIQUE(tenant_id, flow_key, version), partial unique index for one ACTIVE per (tenant_id, user_type, context))
+- MigrationsTest (Testcontainers + plain Flyway API) verifies tables/constraints; uses disabledWithoutDocker so it is SKIPPED here — NOT verified locally, needs a run with Docker
+- Files: src/main/resources/db/migration/V1__initial_schema.sql, MigrationsTest
+- **Learnings for future iterations:**
+  - Migrations live in src/main/resources/db/migration (default Flyway location); never edit V1, add V2+
+  - tenant_id is VARCHAR(64); ids are UUID; flow_execution has lock_version for optimistic locking (US-011)
+---
