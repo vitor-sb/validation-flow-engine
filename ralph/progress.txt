@@ -78,3 +78,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
 - **Learnings for future iterations:**
   - The partial unique index makes >1 ACTIVE impossible in the DB, so the ambiguity test stubs the repo by subclassing JdbcFlowRepository.
 ---
+## 2026-10-03 - US-009
+- `domain/ConditionEvaluator.evaluate(condition, data)` -> `Evaluation(result, observed)`. Same condition shape as GraphValidator. Dotted field paths (`inputData.groups`). Three-valued (Kleene) logic: missing/null/incompatible = unknown -> final false, and NOT(unknown) stays false. EXISTS is the only operator that is true/false on absence. Numbers compared via BigDecimal; observed = field value for leaves, list of child observed for AND/OR/NOT.
+- Files: domain/ConditionEvaluator, ConditionEvaluatorTest
+- **Learnings for future iterations:**
+  - Executor (US-011) should call `ConditionEvaluator.evaluate(transition.condition, contextMap)` and write result+observed to execution_audit_log; a transition without `condition` is the default/else (not handled by the evaluator).
+  - Evaluator assumes validated conditions (GraphValidator); malformed input throws ClassCastException.
+---
