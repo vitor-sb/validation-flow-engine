@@ -68,4 +68,13 @@ class FlowCreateTest {
 				.content(VALID)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONFLICT"));
 	}
 
+	@Test
+	void validateReturnsErrorsWithoutPersisting() throws Exception {
+		mvc.perform(post("/api/v1/flows/validate").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"graphDefinition\":{\"nodes\":{}}}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.valid").value(false))
+				.andExpect(jsonPath("$.errors[0].code").exists());
+		org.mockito.Mockito.verifyNoInteractions(repository);
+	}
+
 }

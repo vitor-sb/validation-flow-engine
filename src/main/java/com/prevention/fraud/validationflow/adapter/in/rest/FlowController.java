@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.prevention.fraud.validationflow.application.FlowService;
 import com.prevention.fraud.validationflow.config.TenantPrincipal;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.GraphValidator;
 import com.prevention.fraud.validationflow.domain.InputField;
 
 import jakarta.validation.Valid;
@@ -39,10 +40,25 @@ class FlowController {
 			List<InputField> inputContract, Map<String, Object> metadata, String createdBy, Instant createdAt) {
 	}
 
+	record ValidateRequest(@NotNull Map<String, Object> graphDefinition) {
+	}
+
+	record ValidateResponse(boolean valid, List<GraphValidator.GraphError> errors) {
+	}
+
 	private final FlowService service;
 
-	FlowController(FlowService service) {
+	private final GraphValidator graphValidator;
+
+	FlowController(FlowService service, GraphValidator graphValidator) {
 		this.service = service;
+		this.graphValidator = graphValidator;
+	}
+
+	@PostMapping("/validate")
+	ValidateResponse validate(@Valid @RequestBody ValidateRequest r) {
+		List<GraphValidator.GraphError> errors = graphValidator.validate(r.graphDefinition());
+		return new ValidateResponse(errors.isEmpty(), errors);
 	}
 
 	@PostMapping

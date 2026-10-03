@@ -48,3 +48,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Any new unique-constraint path is already mapped to 409 globally by DuplicateKeyException handler; no per-endpoint code needed.
   - Read/modify isolation tests for new queries (US-006/007) must assert tenant B gets 404/no rows for tenant A's ids.
 ---
+## 2026-10-03 - US-005
+- `POST /api/v1/flows/validate` (body `{graphDefinition}`) returns `{valid, errors[{code,nodeId,message}]}` without persisting. Pure domain `GraphValidator` with codes: NO_NODES, MISSING_START, INVALID_NODE_TYPE, EDGE_TO_UNKNOWN_NODE, INVALID_CONDITION, UNREACHABLE_NODE, NO_PATH_TO_END, CYCLE_DETECTED, UNKNOWN_VALIDATOR_TYPE, INVALID_TIMEOUT, INVALID_RETRY_POLICY, INVALID_SUB_FLOW, INVALID_MAPPING, SUB_FLOW_DEPTH_EXCEEDED. One unit test per rule in GraphValidatorTest.
+- Files: domain/GraphValidator, config/FlowConfig, FlowController, GraphValidatorTest, FlowCreateTest
+- **Learnings for future iterations:**
+  - Graph format: `startNodeId`, `nodes{id:{type,config,transitions[{to,condition}]}}`; condition = `{operator,field,value}` or `{operator:AND|OR|NOT, conditions:[...]}` (US-009 evaluator should use the same shape).
+  - Validator registry doesn't exist yet: `GraphValidator` takes a `Predicate<String>` wired in FlowConfig as `type -> false`; US-010 must replace it with the registry lookup.
+  - US-006 activation should call `graphValidator.validate(...)` and return 422 when errors are non-empty. Sub-flow depth is only checked per node (`maxDepth` <= 3); cross-flow cyclic composition (A->B->A) is not checked yet (US-015).
+---
