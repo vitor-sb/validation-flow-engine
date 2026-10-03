@@ -23,3 +23,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Migrations live in src/main/resources/db/migration (default Flyway location); never edit V1, add V2+
   - tenant_id is VARCHAR(64); ids are UUID; flow_execution has lock_version for optimistic locking (US-011)
 ---
+## 2026-10-03 - US-003
+- Static API-key auth: `X-API-Key` header -> `TenantPrincipal(tenantId)` + `SCOPE_<scope>` authorities (keys configured under `app.security.api-keys[n].{key,tenant-id,scopes}`; none by default). 401 without valid key, 403 on missing scope. Scope rules per route/method in SecurityConfig (archive uses flow:activate).
+- Files: config/{SecurityConfig,ApiKeyAuthenticationFilter,ApiKeyProperties,TenantPrincipal}, AuthenticationTest
+- **Learnings for future iterations:**
+  - Controllers/repositories must take tenant from `@AuthenticationPrincipal TenantPrincipal` and filter every query by it (no queries exist yet, so "all queries filter by tenant_id" is enforced by convention only).
+  - Keys are plaintext in config (MVP); move to hashed storage/DB if needed. New endpoints need a matcher in SecurityConfig, otherwise they only require authentication.
+  - Authorization runs before dispatch, so 401/403 tests work without controllers.
+---
