@@ -31,3 +31,12 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Keys are plaintext in config (MVP); move to hashed storage/DB if needed. New endpoints need a matcher in SecurityConfig, otherwise they only require authentication.
   - Authorization runs before dispatch, so 401/403 tests work without controllers.
 ---
+## 2026-10-03 - US-004
+- POST /api/v1/flows creates a DRAFT flow (version = max+1 per tenant+flowKey, createdBy = tenant for now, createdAt set). Bean validation errors -> 400 `ErrorResponse(code, retryable, details)` via RestExceptionHandler.
+- Files: domain/{FlowDefinition,FlowStatus,InputField}, application/{FlowService,FlowRepository}, adapter/in/rest/{FlowController,ErrorResponse,RestExceptionHandler}, adapter/out/postgres/JdbcFlowRepository, config/FlowConfig, FlowCreateTest, JdbcFlowRepositoryTest
+- **Learnings for future iterations:**
+  - Docker IS available now and the JDK/Maven are on PATH (sdkman): plain `mvn -q -B test` works; Testcontainers tests run for real.
+  - DB-less `@SpringBootTest` tests (Health/Authentication/FlowCreate) need `@MockitoBean FlowRepository`, since JdbcFlowRepository needs a JdbcTemplate. Add the same mock for any new port implementation.
+  - Services are plain classes in `application`, wired as beans in `config/FlowConfig` (keeps application free of Spring). JSON columns are written with JsonMapper (`tools.jackson`, Jackson 3) and `?::jsonb`.
+  - Concurrent create of same key can hit the unique constraint (500); tolerated for MVP.
+---
