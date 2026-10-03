@@ -1,0 +1,302 @@
+{
+  "project": "Validation Flow Engine",
+  "branchName": "ralph-branch",
+  "description": "Validation Flow Engine (MVP)",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Esqueleto hexagonal do projeto",
+      "description": "Como desenvolvedor, quero a estrutura de pacotes e as regras de dependência definidas para que o domínio fique isolado de framework e banco.",
+      "acceptanceCriteria": [
+        "Projeto Spring Boot (Java 17+) com pacotes `domain`, `application`, `adapter/in/rest`, `adapter/out/postgres`, `config`",
+        "Teste de arquitetura (ex.: ArchUnit) falha se `domain` depender de outra camada ou `application` depender de `adapter`",
+        "Endpoints `/actuator/health` (liveness/readiness) e `/api/v1/health` respondem 200",
+        "Build e testes passam"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Schema PostgreSQL inicial",
+      "description": "Como desenvolvedor, quero as tabelas do MVP versionadas por migration para persistir fluxos, execuções e histórico.",
+      "acceptanceCriteria": [
+        "Migrations (Flyway ou Liquibase) criam `flow_definition`, `flow_execution`, `node_execution`, `execution_audit_log`, `idempotency_key`",
+        "Campos variáveis (`graph_definition`, `metadata`, `input_data`, `context_data`, `result`, `error_info`, snapshots) são `JSONB`",
+        "`UNIQUE(tenant_id, flow_key, version)` em `flow_definition`",
+        "Índice único parcial garante no máximo 1 versão `ACTIVE` por `(tenant_id, user_type, context)`",
+        "Todas as tabelas possuem `tenant_id`",
+        "Migrations aplicam em banco vazio (teste com Testcontainers)",
+        "Build e testes passam"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Autenticação com tenant e escopos",
+      "description": "Como sistema consumidor, quero me autenticar com uma credencial ligada a um tenant para que meus dados fiquem isolados e minhas permissões sejam limitadas.",
+      "acceptanceCriteria": [
+        "`tenantId` é resolvido da credencial (API key/token), nunca do corpo da requisição",
+        "Escopos suportados: `validation:execute`, `validation:read`, `flow:read`, `flow:write`, `flow:activate`",
+        "Credencial com apenas `validation:execute` recebe 403 em `POST /flows` e `PATCH /flows/{id}/activate`",
+        "Credencial sem credencial válida recebe 401",
+        "Todas as consultas ao banco filtram por `tenant_id` do contexto autenticado",
+        "Build e testes passam"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Criar fluxo em DRAFT",
+      "description": "Como analista, quero cadastrar um fluxo em rascunho para depois validá-lo e ativá-lo.",
+      "acceptanceCriteria": [
+        "`POST /api/v1/flows` aceita `flowKey`, `userType`, `context`, `displayName`, `description`, `graphDefinition`, `metadata`, contrato de entrada (campos obrigatórios/opcionais com tipos)",
+        "Fluxo criado com `status=DRAFT`, `version` gerada, `createdBy`/`createdAt` preenchidos",
+        "Campos `@NotBlank`/`@NotNull` inválidos retornam 400 com `ErrorResponse`",
+        "Dois tenants podem criar a mesma `flowKey` sem colisão",
+        "Build e testes passam"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Validação estrutural do grafo",
+      "description": "Como analista, quero validar o grafo antes de ativar para não publicar um fluxo quebrado.",
+      "acceptanceCriteria": [
+        "`POST /api/v1/flows/validate` valida sem persistir e retorna lista de erros",
+        "Detecta: ausência de `startNodeId`/node `START`, nenhum caminho até `END`, edge para node inexistente, ciclos (quando DAG), nodes inalcançáveis",
+        "Detecta: `validatorType` inexistente no registry, timeout/retry inválidos, condição ou mapping inválido, profundidade de sub-flow acima do limite",
+        "Um teste unitário por regra acima (grafo válido passa, grafo inválido falha com código de erro específico)",
+        "Build e testes passam"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Versionamento e ativação atômica",
+      "description": "Como analista, quero ativar uma versão sem afetar execuções em andamento e sem editar versões ativas.",
+      "acceptanceCriteria": [
+        "`PUT /flows/{flowId}` em fluxo `ACTIVE` cria nova versão `DRAFT`; a versão ativa não é alterada",
+        "`PATCH /flows/{flowId}/activate` roda a validação estrutural e rejeita (422) se inválida",
+        "Ativação arquiva a versão `ACTIVE` anterior do mesmo seletor na mesma transação",
+        "Duas ativações concorrentes do mesmo seletor: apenas uma tem sucesso (teste de concorrência)",
+        "`PATCH /flows/{flowId}/archive` arquiva; versões arquivadas continuam consultáveis via `GET`",
+        "Grafo de versão ativada é imutável (tentativa de alteração retorna 409)",
+        "Build e testes passam"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Consulta e listagem de fluxos",
+      "description": "Como analista, quero listar e consultar fluxos para auditar o que está publicado.",
+      "acceptanceCriteria": [
+        "`GET /flows` com paginação e filtros (`flowKey`, `status`, `userType`, `context`)",
+        "`GET /flows/{flowId}` retorna definição completa",
+        "Fluxo de outro tenant retorna 404",
+        "Build e testes passam"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Resolução do fluxo ativo",
+      "description": "Como engine, quero resolver a versão ativa a partir de `flowKey` ou de `(tenantId, userType, context)`.",
+      "acceptanceCriteria": [
+        "Com `flowKey` informado, resolve a versão `ACTIVE` dessa chave no tenant",
+        "Sem `flowKey`, resolve por `(tenantId, userType, context)`",
+        "Nenhuma versão ativa encontrada: erro 404 com código `FLOW_NOT_FOUND`",
+        "Mais de uma versão ativa para o seletor: erro de configuração inválida, sem desempate por data ou ordem do banco",
+        "Grupos, papéis e canais NÃO participam da seleção (apenas das conditions)",
+        "Build e testes passam"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Avaliador de condições (Java puro)",
+      "description": "Como analista, quero condições estruturadas sobre o payload para decidir o caminho do fluxo de forma segura e determinística.",
+      "acceptanceCriteria": [
+        "Suporta `EQUALS`, `NOT_EQUALS`, `GREATER_THAN`, `GREATER_THAN_OR_EQUALS`, `LESS_THAN`, `LESS_THAN_OR_EQUALS`, `CONTAINS`, `IN`, `EXISTS`, `AND`, `OR`, `NOT`",
+        "`CONTAINS` exige coleção; `IN` compara valor com lista permitida",
+        "Campo ausente, nulo ou tipo incompatível resulta em `false`, nunca em `true` silencioso (teste por operador)",
+        "Nenhuma expressão textual livre é executada (sem SpEL/script)",
+        "Cada avaliação retorna resultado + valor observado para registro no histórico",
+        "Build e testes passam"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Validator Registry (Strategy)",
+      "description": "Como desenvolvedor, quero registrar novos validators por chave estável sem tocar no executor.",
+      "acceptanceCriteria": [
+        "Interface `ValidatorStrategy { String key(); ValidationResult execute(ValidationInput) }` na camada `application`",
+        "Registry descobre beans `ValidatorStrategy` automaticamente e rejeita chaves duplicadas na inicialização",
+        "Teste adiciona um validator fake novo e executa um fluxo com ele sem alterar código do executor",
+        "`GET /node-types` lista validators; `GET /node-types/{key}` retorna schema/capabilities",
+        "Build e testes passam"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Executor de grafo sequencial e condicional",
+      "description": "Como sistema consumidor, quero iniciar uma validação e obter a decisão após o grafo ser percorrido.",
+      "acceptanceCriteria": [
+        "`POST /api/v1/executions` com `userType`, `context`, `inputData` (e `flowKey`/`correlationId` opcionais) cria a execução e retorna `executionId`, `flowKey`, `flowVersion`, `status`, `startedAt`",
+        "Contrato de entrada do fluxo é validado antes de iniciar o grafo; campo obrigatório ausente retorna 400",
+        "Executa nodes `START`, `VALIDATION`, `DECISION`, `END`; transições avaliadas na ordem, seguindo a primeira cuja condição é verdadeira",
+        "Sem transição correspondente: falha com erro explícito `NO_MATCHING_TRANSITION` (execução `FAILED`)",
+        "Execução usa snapshot da versão resolvida; ativar nova versão durante a execução não a afeta (teste)",
+        "Status válidos: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `TIMED_OUT`, `CANCELLED`; transições de estado controladas pelo domínio com locking otimista",
+        "Contexto isolado por execução",
+        "No MVP a resposta é **síncrona**: o `POST` retorna a decisão final (`COMPLETED`/`FAILED`) no mesmo request; o modelo de resposta (`executionId` + `status`) já permite, no futuro, responder `RUNNING` e notificar o resultado por callback (ver Non-Goals e Questões em aberto)",
+        "Build e testes passam"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Timeout e retry por node",
+      "description": "Como analista, quero configurar timeout e retry por node para tratar indisponibilidade de forma consistente.",
+      "acceptanceCriteria": [
+        "`config.timeout` (ISO-8601, ex.: `PT30S`) é aplicado; estouro marca a tentativa como `TIMED_OUT`",
+        "`config.retryPolicy` (`maxAttempts`, `backoff` fixo/exponencial) re-tenta apenas erros marcados `retryable`",
+        "Cada tentativa gera um registro em `node_execution` com `attempt` incrementado",
+        "Esgotadas as tentativas, a execução termina `FAILED` com `ErrorResponse(code, retryable, details)`",
+        "Timeout, retry e erro expostos como métricas (contadores por validator)",
+        "Build e testes passam"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Histórico por node e consulta de execução",
+      "description": "Como auditor, quero saber o que ocorreu em cada execução e por que a decisão foi tomada.",
+      "acceptanceCriteria": [
+        "`node_execution` guarda `input_snapshot`, `output_data`, `error_info`, `attempt`, `started_at`, `completed_at`",
+        "Transições e conditions avaliadas (com valor observado) ficam registradas em `execution_audit_log`",
+        "`GET /executions/{id}` retorna status, resultado, `tenantId`-scoped; `GET /executions/{id}/nodes` retorna histórico; `GET /executions` lista com paginação",
+        "Execução de outro tenant retorna 404",
+        "Dados sensíveis (documentos, tokens) mascarados em logs técnicos; logs trazem `correlationId`, `executionId`, `flowKey`, `flowVersion`, `nodeId`, `status`",
+        "Build e testes passam"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Idempotência no início de execução",
+      "description": "Como sistema consumidor, quero reenviar `POST /executions` com a mesma `Idempotency-Key` sem duplicar a operação.",
+      "acceptanceCriteria": [
+        "Header `Idempotency-Key` aceito; escopo da chave = tenant",
+        "Repetição com mesma chave e mesmo payload retorna a execução original",
+        "Mesma chave com payload diferente retorna 409",
+        "Duas requisições simultâneas com a mesma chave criam apenas uma execução (teste de concorrência)",
+        "Build e testes passam"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Sub-flow simples",
+      "description": "Como analista, quero que um fluxo chame outro fluxo para reutilizar validações comuns.",
+      "acceptanceCriteria": [
+        "Node `SUB_FLOW` aceita `flowKey` do filho, `inputMapping` e `outputMapping` (JSONPath), `onFailure` (`FAIL_PARENT`), `maxDepth`",
+        "Filho executa como `flow_execution` com `parent_execution_id`/`parent_node_id`; usa a versão ativa no momento da chamada (ver Questões em aberto)",
+        "Filho recebe só o subconjunto mapeado e não altera o contexto do pai; o pai recebe só o `outputMapping`",
+        "Profundidade acima de `maxDepth` ou composição cíclica (A→B→A) é rejeitada na ativação e em runtime",
+        "Build e testes passam"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Multi-tenancy comprovada",
+      "description": "Como responsável de segurança, quero evidência de que tenants não se enxergam.",
+      "acceptanceCriteria": [
+        "Teste de integração: tenant A e B com mesma `flowKey`, fluxos e execuções distintas",
+        "Teste: tenant A não lê, ativa, arquiva nem executa fluxo do tenant B (404)",
+        "Execução registra `tenantId`, `flowVersion` e as conditions/dados de contexto usados",
+        "Build e testes passam"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Grupos de documentos na configuração do fluxo",
+      "description": "Como analista, quero declarar grupos de documentos (obrigatórios, alternativos, condicionais) no fluxo para pedir documentos diferentes conforme o payload.",
+      "acceptanceCriteria": [
+        "Grupo declarado em `config.params` do node ou no grafo, versionado no snapshot (sem cadastro global)",
+        "Suporta itens obrigatórios, alternativos (um entre N) e condicionais (via condition)",
+        "Condition `inputData.groups CONTAINS \"X\"` seleciona o grupo; resultado e documentos efetivamente aplicados são registrados na execução",
+        "Build e testes passam"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Teste de carga inicial",
+      "description": "Como time, quero medir a capacidade real antes de assumir metas de escala.",
+      "acceptanceCriteria": [
+        "Script de carga reproduzível (ex.: k6/Gatling) executando fluxo leve com validator fake",
+        "Relatório com throughput, latência p50/p95/p99 e uso de banco em uma máquina de referência documentada",
+        "Nenhuma meta de volume (35–50 mi/dia, 800–1.500/s) é tratada como requisito; resultado vira linha de base",
+        "Build e testes passam"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Documentação OpenAPI (`openapi.yaml`)",
+      "description": "Como consumidor e como desenvolvedor, quero um contrato OpenAPI versionado para integrar e gerar clientes sem ler o código.",
+      "acceptanceCriteria": [
+        "Arquivo `openapi.yaml` (OpenAPI 3.x) na raiz do módulo/repositório documenta todos os endpoints do MVP: gestão de fluxos, execuções, `/node-types`, health",
+        "Cada endpoint tem descrição, parâmetros (incl. header `Idempotency-Key`), schemas de request/response, códigos de erro (400, 401, 403, 404, 409, 422) com `ErrorResponse`, exemplos e escopo de segurança exigido",
+        "Schemas de `inputData`, `contextData`, `result` e `config` documentados como objetos dinâmicos com exemplo",
+        "Execution API e Flow Management API separadas por tags",
+        "`openapi.yaml` é **gerado a partir do código** (ex.: springdoc-openapi com anotações nos controllers/DTOs) e commitado; o build falha se o arquivo versionado estiver desatualizado em relação ao gerado",
+        "O arquivo gerado é validado no build (ex.: linter Spectral/swagger-parser)",
+        "Build e testes passam"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

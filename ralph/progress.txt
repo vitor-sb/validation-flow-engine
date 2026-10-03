@@ -1,0 +1,17 @@
+# Ralph Progress Log
+Started: Sat Oct  3 19:21:45 -03 2026
+## Codebase Patterns
+- No JDK/Maven/Docker preinstalled. JDK 17 + Maven 3.9.9 live in ~/jdk; run: `JAVA_HOME=~/jdk/jdk-17.0.20.1+1 ~/jdk/apache-maven-3.9.9/bin/mvn -q -B test` (`./mvnw` has CRLF line endings and fails).
+- Docker is unavailable here, so Testcontainers tests cannot run; DB-less tests exclude DataSource/Hibernate/Flyway autoconfig via `@SpringBootTest(properties=...)`.
+- Spring Boot 4: test packages moved (e.g. `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`).
+- Base package `com.prevention.fraud.validationflow`; layers: domain, application, adapter.in.rest, adapter.out.postgres, config. ArchUnit rules in `architecture/ArchitectureTest`.
+
+---
+
+## 2026-10-03 - US-001
+- Added hexagonal package skeleton, ArchUnit rules (domain isolated; application !-> adapter), public health endpoints (/actuator/health[/liveness|/readiness], /api/v1/health), SecurityConfig (health permitAll, rest authenticated + httpBasic placeholder until US-003)
+- Files: pom.xml (archunit-junit5), application.yaml (probes), config/SecurityConfig, adapter/in/rest/HealthController, package-info files, HealthEndpointsTest, ArchitectureTest; removed Docker-dependent contextLoads test
+- **Learnings for future iterations:**
+  - ArchUnit rules use allowEmptyShould(true) because domain/application have no classes yet; remove if it hides problems later
+  - Full-context tests with Postgres (US-002+) need Docker; they could not be verified in this environment
+---
