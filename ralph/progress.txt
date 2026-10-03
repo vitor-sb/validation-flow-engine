@@ -102,3 +102,13 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Any new DB-less @SpringBootTest needs `@MockitoBean` for both FlowRepository and ExecutionRepository.
   - Not done (later stories): GET executions, timeouts/retries, SUB_FLOW, idempotency, input field type checks (only presence).
 ---
+## 2026-10-03 - US-012
+- VALIDATION nodes now honor `config.timeout` (run on a daemon cached pool, Future.get -> attempt `TIMED_OUT`, code NODE_TIMEOUT, treated as retryable) and `config.retryPolicy {maxAttempts, backoff FIXED|EXPONENTIAL, delay (ISO, default PT0.1S, optional)}`. Validators signal failures by throwing `application/ValidatorException(code, message, retryable)`; only retryable ones are retried; other exceptions -> VALIDATOR_ERROR non-retryable. One `node_execution` row per attempt (attempt incremented). Exhausted -> execution FAILED with errorInfo `{code,message,retryable,details{nodeId,attempts}}`.
+- Micrometer counters (tags validator[,code]): validation.node.timeout / .retry / .error. ExecutionService now takes a MeterRegistry.
+- Files: application/{ExecutionService,ExecutionRepository,ValidatorException}, domain/FlowExecution (fail overload), JdbcExecutionRepository.recordNode (attempt/status/error), FlowConfig, ExecutionTest
+- **Learnings for future iterations:**
+  - `recordNode(tenant, exec, nodeId, type, attempt, status, output, error)`; status strings COMPLETED/FAILED/TIMED_OUT.
+  - Test graphs need a START node as startNodeId or activation returns 422.
+  - A validator returning success=false is still not an error (transitions decide); only thrown exceptions trigger retry/failure.
+  - SimpleMeterRegistry is shared across tests in ExecutionTest: call `meters.clear()` before asserting counts.
+---

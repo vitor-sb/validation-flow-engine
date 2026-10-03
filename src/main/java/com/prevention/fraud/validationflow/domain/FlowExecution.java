@@ -27,8 +27,14 @@ public record FlowExecution(UUID id, String tenantId, UUID flowDefinitionId, Str
 	}
 
 	public FlowExecution fail(Map<String, Object> context, String code, String message) {
+		return fail(context, code, message, false, Map.of());
+	}
+
+	/** Error shape mirrors ErrorResponse(code, retryable, details). */
+	public FlowExecution fail(Map<String, Object> context, String code, String message, boolean retryable,
+			Map<String, Object> details) {
 		return to(ExecutionStatus.FAILED, Set.of(ExecutionStatus.PENDING, ExecutionStatus.RUNNING), context, null,
-				Map.of("code", code, "message", message));
+				Map.of("code", code, "message", message, "retryable", retryable, "details", details));
 	}
 
 	private FlowExecution to(ExecutionStatus next, Set<ExecutionStatus> allowedFrom, Map<String, Object> context,

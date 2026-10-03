@@ -21,8 +21,9 @@ class FlowConfig {
 	}
 
 	@Bean
-	ExecutionService executionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry) {
-		return new ExecutionService(flows, repository, registry);
+	ExecutionService executionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
+			io.micrometer.core.instrument.MeterRegistry meters) {
+		return new ExecutionService(flows, repository, registry, meters);
 	}
 
 	@Bean

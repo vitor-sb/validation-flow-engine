@@ -17,7 +17,9 @@ import com.prevention.fraud.validationflow.application.ExecutionService;
 import com.prevention.fraud.validationflow.application.FlowException;
 import com.prevention.fraud.validationflow.application.FlowService;
 import com.prevention.fraud.validationflow.application.ValidatorRegistry;
+import com.prevention.fraud.validationflow.application.ValidatorException;
 import com.prevention.fraud.validationflow.application.ValidatorStrategy;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.prevention.fraud.validationflow.domain.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
 import com.prevention.fraud.validationflow.domain.GraphValidator;
@@ -58,6 +60,41 @@ class ExecutionTest {
 		}
 	};
 
+	static final java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+
+	static final java.util.concurrent.atomic.AtomicBoolean retryable = new java.util.concurrent.atomic.AtomicBoolean();
+
+	static final SimpleMeterRegistry meters = new SimpleMeterRegistry();
+
+	/** Always throws; retryable flag is switchable. */
+	static final ValidatorStrategy FLAKY = new ValidatorStrategy() {
+		public String key() {
+			return "flaky";
+		}
+
+		public ValidationResult execute(ValidationInput in) {
+			calls.incrementAndGet();
+			throw new ValidatorException("UPSTREAM_DOWN", "boom", retryable.get());
+		}
+	};
+
+	static final ValidatorStrategy SLOW = new ValidatorStrategy() {
+		public String key() {
+			return "slow";
+		}
+
+		public ValidationResult execute(ValidationInput in) {
+			calls.incrementAndGet();
+			try {
+				Thread.sleep(5000);
+			}
+			catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			return new ValidationResult(true, Map.of());
+		}
+	};
+
 	static Map<String, Object> cond(String field, Object value) {
 		return Map.of("operator", "EQUALS", "field", field, "value", value);
 	}
@@ -86,10 +123,10 @@ class ExecutionTest {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		jdbc = new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()));
 		var json = JsonMapper.builder().build();
-		var registry = new ValidatorRegistry(List.of(FAKE));
+		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
-		executions = new ExecutionService(flows, exRepo, registry);
+		executions = new ExecutionService(flows, exRepo, registry, meters);
 	}
 
 	static UUID activate(String key, String ctx, Map<String, Object> g, List<InputField> contract) {
@@ -153,6 +190,57 @@ class ExecutionTest {
 		FlowExecution done = executions.execute("t", null, "PF", "C1", Map.of("ok", true), null);
 		assertThrows(IllegalStateException.class, () -> done.start());
 		assertThrows(IllegalStateException.class, () -> done.fail(Map.of(), "X", "x"));
+	}
+
+	static Map<String, Object> singleNodeGraph(String validator, Map<String, Object> extra) {
+		Map<String, Object> cfg = new java.util.HashMap<>(extra);
+		cfg.put("validatorType", validator);
+		return Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "v"))),
+				"v", Map.of("type", "VALIDATION", "config", cfg, "transitions", List.of(Map.of("to", "e"))),
+				"e", Map.of("type", "END", "config", Map.of())));
+	}
+
+	@Test
+	void retryableErrorIsRetriedThenFailsWithErrorInfo() {
+		activate("k5", "C5", singleNodeGraph("flaky",
+				Map.of("retryPolicy", Map.of("maxAttempts", 3, "backoff", "EXPONENTIAL", "delay", "PT0.01S"))), List.of());
+		calls.set(0);
+		meters.clear();
+		retryable.set(true);
+		FlowExecution f = executions.execute("t", null, "PF", "C5", Map.of(), null);
+		assertEquals(3, calls.get());
+		assertEquals(ExecutionStatus.FAILED, f.status());
+		assertEquals("UPSTREAM_DOWN", f.errorInfo().get("code"));
+		assertEquals(true, f.errorInfo().get("retryable"));
+		assertEquals(List.of(1, 2, 3), jdbc.queryForList(
+				"SELECT attempt FROM node_execution WHERE execution_id = ? AND node_id = 'v' ORDER BY attempt", Integer.class, f.id()));
+		assertEquals(2.0, meters.counter("validation.node.retry", "validator", "flaky").count());
+		assertEquals(3.0, meters.counter("validation.node.error", "validator", "flaky", "code", "UPSTREAM_DOWN").count());
+	}
+
+	@Test
+	void nonRetryableErrorIsNotRetried() {
+		activate("k6", "C6", singleNodeGraph("flaky", Map.of("retryPolicy", Map.of("maxAttempts", 3))), List.of());
+		calls.set(0);
+		retryable.set(false);
+		FlowExecution f = executions.execute("t", null, "PF", "C6", Map.of(), null);
+		assertEquals(1, calls.get());
+		assertEquals(ExecutionStatus.FAILED, f.status());
+		assertEquals(false, f.errorInfo().get("retryable"));
+	}
+
+	@Test
+	void timeoutMarksAttemptTimedOutAndIsRetried() {
+		activate("k7", "C7", singleNodeGraph("slow", Map.of("timeout", "PT0.05S",
+				"retryPolicy", Map.of("maxAttempts", 2, "backoff", "FIXED", "delay", "PT0.01S"))), List.of());
+		calls.set(0);
+		FlowExecution f = executions.execute("t", null, "PF", "C7", Map.of(), null);
+		assertEquals(ExecutionStatus.FAILED, f.status());
+		assertEquals("NODE_TIMEOUT", f.errorInfo().get("code"));
+		assertEquals(List.of("TIMED_OUT", "TIMED_OUT"), jdbc.queryForList(
+				"SELECT status FROM node_execution WHERE execution_id = ? AND node_id = 'v' ORDER BY attempt", String.class, f.id()));
+		assertEquals(2.0, meters.counter("validation.node.timeout", "validator", "slow").count());
 	}
 
 }

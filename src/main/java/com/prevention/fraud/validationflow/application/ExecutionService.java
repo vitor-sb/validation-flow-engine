@@ -4,11 +4,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.prevention.fraud.validationflow.domain.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
+
+import io.micrometer.core.instrument.MeterRegistry;
 
 public class ExecutionService {
 
@@ -18,10 +26,21 @@ public class ExecutionService {
 
 	private final ValidatorRegistry registry;
 
-	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry) {
+	private final MeterRegistry meters;
+
+	// only used when a node has config.timeout; daemon threads so a hung validator never blocks shutdown
+	private final ExecutorService timeoutPool = Executors.newCachedThreadPool(r -> {
+		Thread t = new Thread(r, "validator-timeout");
+		t.setDaemon(true);
+		return t;
+	});
+
+	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
+			MeterRegistry meters) {
 		this.flows = flows;
 		this.repository = repository;
 		this.registry = registry;
+		this.meters = meters;
 	}
 
 	/** Synchronous: resolves the active flow, validates the input contract, walks the snapshot graph, returns the final state. */
@@ -57,20 +76,23 @@ public class ExecutionService {
 			String type = (String) node.get("type");
 			Map<String, Object> config = node.get("config") == null ? Map.of() : (Map<String, Object>) node.get("config");
 			switch (type) {
-				case "START", "DECISION" -> repository.recordNode(ex.tenantId(), ex.id(), id, type, true, Map.of());
+				case "START", "DECISION" -> repository.recordNode(ex.tenantId(), ex.id(), id, type, 1, "COMPLETED", Map.of(), null);
 				case "VALIDATION" -> {
 					ValidatorStrategy v = registry.find((String) config.get("validatorType")).orElse(null);
 					if (v == null) {
 						return save(ex.fail(ctx, "VALIDATOR_NOT_FOUND", "validator not registered at node " + id));
 					}
-					var r = v.execute(new ValidatorStrategy.ValidationInput(Map.copyOf(ctx), config));
-					Map<String, Object> out = new LinkedHashMap<>(r.output() == null ? Map.of() : r.output());
-					out.put("success", r.success());
+					Attempt a = runWithRetry(ex, id, type, v, ctx, config);
+					if (a.error() != null) {
+						return save(ex.fail(ctx, (String) a.error().get("code"), (String) a.error().get("message"),
+								(Boolean) a.error().get("retryable"), Map.of("nodeId", id, "attempts", a.attempts())));
+					}
+					Map<String, Object> out = new LinkedHashMap<>(a.result().output() == null ? Map.of() : a.result().output());
+					out.put("success", a.result().success());
 					((Map<String, Object>) ctx.get("nodes")).put(id, out);
-					repository.recordNode(ex.tenantId(), ex.id(), id, type, r.success(), out);
 				}
 				case "END" -> {
-					repository.recordNode(ex.tenantId(), ex.id(), id, type, true, Map.of());
+					repository.recordNode(ex.tenantId(), ex.id(), id, type, 1, "COMPLETED", Map.of(), null);
 					Map<String, Object> result = new LinkedHashMap<>();
 					result.put("endNodeId", id);
 					result.put("config", config);
@@ -98,6 +120,82 @@ public class ExecutionService {
 			}
 			id = next;
 		}
+	}
+
+	record Attempt(ValidatorStrategy.ValidationResult result, Map<String, Object> error, int attempts) {
+	}
+
+	/** Runs the validator up to retryPolicy.maxAttempts times, one node_execution row per attempt. */
+	@SuppressWarnings("unchecked")
+	private Attempt runWithRetry(FlowExecution ex, String nodeId, String type, ValidatorStrategy v,
+			Map<String, Object> ctx, Map<String, Object> config) {
+		Map<String, Object> policy = (Map<String, Object>) config.getOrDefault("retryPolicy", Map.of());
+		int max = policy.get("maxAttempts") instanceof Integer n ? n : 1;
+		boolean exponential = "EXPONENTIAL".equals(policy.get("backoff"));
+		Duration delay = Duration.parse((String) policy.getOrDefault("delay", "PT0.1S"));
+		Duration timeout = config.get("timeout") == null ? null : Duration.parse((String) config.get("timeout"));
+		for (int attempt = 1;; attempt++) {
+			String status = "FAILED";
+			Map<String, Object> error;
+			try {
+				var r = call(v, ctx, config, timeout);
+				repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, r.success() ? "COMPLETED" : "FAILED",
+						r.output() == null ? Map.of() : r.output(), null);
+				return new Attempt(r, null, attempt);
+			}
+			catch (TimeoutException e) {
+				meters.counter("validation.node.timeout", "validator", v.key()).increment();
+				status = "TIMED_OUT";
+				error = error("NODE_TIMEOUT", "node " + nodeId + " exceeded " + timeout, true);
+			}
+			catch (ValidatorException e) {
+				error = error(e.code(), String.valueOf(e.getMessage()), e.retryable());
+			}
+			catch (RuntimeException e) {
+				error = error("VALIDATOR_ERROR", String.valueOf(e.getMessage()), false);
+			}
+			repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, Map.of(), error);
+			meters.counter("validation.node.error", "validator", v.key(), "code", (String) error.get("code")).increment();
+			if (!(Boolean) error.get("retryable") || attempt >= max) {
+				return new Attempt(null, error, attempt);
+			}
+			meters.counter("validation.node.retry", "validator", v.key()).increment();
+			long ms = delay.toMillis() * (exponential ? 1L << (attempt - 1) : 1L);
+			try {
+				Thread.sleep(ms);
+			}
+			catch (InterruptedException ie) {
+				Thread.currentThread().interrupt();
+				return new Attempt(null, error("INTERRUPTED", "interrupted while backing off", false), attempt);
+			}
+		}
+	}
+
+	private ValidatorStrategy.ValidationResult call(ValidatorStrategy v, Map<String, Object> ctx,
+			Map<String, Object> config, Duration timeout) throws TimeoutException {
+		var input = new ValidatorStrategy.ValidationInput(Map.copyOf(ctx), config);
+		if (timeout == null) {
+			return v.execute(input);
+		}
+		var f = timeoutPool.submit(() -> v.execute(input));
+		try {
+			return f.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+		}
+		catch (TimeoutException e) {
+			f.cancel(true);
+			throw e;
+		}
+		catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IllegalStateException(e);
+		}
+		catch (ExecutionException e) {
+			throw e.getCause() instanceof RuntimeException re ? re : new IllegalStateException(e.getCause());
+		}
+	}
+
+	private static Map<String, Object> error(String code, String message, boolean retryable) {
+		return Map.of("code", code, "message", message, "retryable", retryable);
 	}
 
 	/** Persists with optimistic locking and returns the instance carrying the new lock version. */

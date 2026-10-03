@@ -70,13 +70,14 @@ class JdbcExecutionRepository implements ExecutionRepository {
 	}
 
 	@Override
-	public void recordNode(String tenantId, UUID executionId, String nodeId, String nodeType, boolean success,
-			Map<String, Object> output) {
+	public void recordNode(String tenantId, UUID executionId, String nodeId, String nodeType, int attempt,
+			String status, Map<String, Object> output, Map<String, Object> error) {
 		jdbc.update("""
-				INSERT INTO node_execution (id, tenant_id, execution_id, node_id, node_type, status, output_data,
-				    completed_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, now())""", UUID.randomUUID(), tenantId, executionId, nodeId,
-				nodeType, success ? "COMPLETED" : "FAILED", json.writeValueAsString(output));
+				INSERT INTO node_execution (id, tenant_id, execution_id, node_id, node_type, attempt, status,
+				    output_data, error_info, completed_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, now())""", UUID.randomUUID(), tenantId, executionId,
+				nodeId, nodeType, attempt, status, json.writeValueAsString(output),
+				error == null ? null : json.writeValueAsString(error));
 	}
 
 	@Override

@@ -16,8 +16,8 @@ public interface ExecutionRepository {
 
 	java.util.Optional<FlowExecution> findById(String tenantId, UUID id);
 
-	void recordNode(String tenantId, UUID executionId, String nodeId, String nodeType, boolean success,
-			Map<String, Object> output);
+	void recordNode(String tenantId, UUID executionId, String nodeId, String nodeType, int attempt,
+			String status, Map<String, Object> output, Map<String, Object> error);
 
 	void audit(String tenantId, UUID executionId, String eventType, String nodeId, Map<String, Object> details);
 
