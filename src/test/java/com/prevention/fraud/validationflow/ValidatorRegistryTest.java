@@ -70,6 +70,9 @@ class ValidatorRegistryTest {
 	@MockitoBean
 	FlowRepository repository;
 
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.ExecutionRepository executionRepository;
+
 	@Test
 	void discoversNewValidatorAndExecutesItViaRegistry() {
 		var result = registry.find("fake").orElseThrow()

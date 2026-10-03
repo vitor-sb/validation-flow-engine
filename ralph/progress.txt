@@ -92,3 +92,13 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Executor (US-011) should do `registry.find(config.validatorType)` and call `execute`; no executor exists yet, so the "fake validator" test exercises registry + graph validation only.
   - No built-in validators exist, so with no beans every VALIDATION node fails structural validation; add test-scope fake beans via `@Import(TestConfiguration)` for integration tests.
 ---
+## 2026-10-03 - US-011
+- `POST /api/v1/executions` (scope validation:execute) -> 201 `{executionId, flowKey, flowVersion, status, startedAt, completedAt, result, error}`, synchronous. `application/ExecutionService` resolves active flow, checks required input-contract fields (missing -> FlowException.invalidInput -> 400 INVALID_INPUT, nothing persisted), inserts PENDING, walks the snapshot graph (START/DECISION no-op, VALIDATION via registry, END completes, SUB_FLOW -> FAILED UNSUPPORTED_NODE_TYPE), first matching transition wins (no condition = default), none -> FAILED NO_MATCHING_TRANSITION.
+- Domain `FlowExecution` (record) owns state transitions (`start/complete/fail`, IllegalStateException otherwise); `ExecutionRepository.update` is optimistic (`WHERE lock_version = ?`, bumps it). Writes node_execution rows and TRANSITION_EVALUATED audit rows.
+- Files: domain/{ExecutionStatus,FlowExecution}, application/{ExecutionService,ExecutionRepository,FlowException}, adapter/in/rest/{ExecutionController,RestExceptionHandler}, adapter/out/postgres/JdbcExecutionRepository, config/FlowConfig, ExecutionTest (Docker), `@MockitoBean ExecutionRepository` added to DB-less tests
+- **Learnings for future iterations:**
+  - Condition fields are paths into the execution ctx: `inputData.<f>` and `nodes.<nodeId>.<output key>` (validator output plus `success`). A failed validator does not fail the execution; transitions decide.
+  - Operators are EQUALS/NOT_EQUALS/GREATER_THAN... (not EQ). Test graphs must have no unreachable nodes or activation returns 422.
+  - Any new DB-less @SpringBootTest needs `@MockitoBean` for both FlowRepository and ExecutionRepository.
+  - Not done (later stories): GET executions, timeouts/retries, SUB_FLOW, idempotency, input field type checks (only presence).
+---

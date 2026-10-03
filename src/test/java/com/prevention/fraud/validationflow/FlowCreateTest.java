@@ -36,6 +36,9 @@ class FlowCreateTest {
 	@MockitoBean
 	FlowRepository repository;
 
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.ExecutionRepository executionRepository;
+
 	static final String VALID = """
 			{"flowKey":"kyc","userType":"PF","context":"ONBOARDING","displayName":"KYC",
 			 "graphDefinition":{"startNodeId":"s","nodes":[],"edges":[]},

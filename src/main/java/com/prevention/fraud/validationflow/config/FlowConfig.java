@@ -4,6 +4,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.prevention.fraud.validationflow.application.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.ExecutionService;
 import com.prevention.fraud.validationflow.application.FlowRepository;
 import com.prevention.fraud.validationflow.application.FlowService;
 import com.prevention.fraud.validationflow.application.ValidatorRegistry;
@@ -16,6 +18,11 @@ class FlowConfig {
 	@Bean
 	FlowService flowService(FlowRepository repository, GraphValidator graphValidator) {
 		return new FlowService(repository, graphValidator);
+	}
+
+	@Bean
+	ExecutionService executionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry) {
+		return new ExecutionService(flows, repository, registry);
 	}
 
 	@Bean
