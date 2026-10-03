@@ -161,7 +161,7 @@
         "Build e testes passam"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

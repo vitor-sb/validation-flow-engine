@@ -85,3 +85,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Executor (US-011) should call `ConditionEvaluator.evaluate(transition.condition, contextMap)` and write result+observed to execution_audit_log; a transition without `condition` is the default/else (not handled by the evaluator).
   - Evaluator assumes validated conditions (GraphValidator); malformed input throws ClassCastException.
 ---
+## 2026-10-03 - US-010
+- `application/ValidatorStrategy` (key, execute(ValidationInput)->ValidationResult, default schema()/capabilities()) + `ValidatorRegistry` (plain class; rejects duplicate keys with IllegalStateException at construction). FlowConfig builds it from all `ValidatorStrategy` beans (ObjectProvider, so zero beans is fine) and GraphValidator now uses `registry::contains`. GET /api/v1/node-types and /{key} (unknown -> 404 via ResponseStatusException).
+- Files: application/{ValidatorStrategy,ValidatorRegistry}, adapter/in/rest/NodeTypeController, config/FlowConfig, ValidatorRegistryTest
+- **Learnings for future iterations:**
+  - Executor (US-011) should do `registry.find(config.validatorType)` and call `execute`; no executor exists yet, so the "fake validator" test exercises registry + graph validation only.
+  - No built-in validators exist, so with no beans every VALIDATION node fails structural validation; add test-scope fake beans via `@Import(TestConfiguration)` for integration tests.
+---
