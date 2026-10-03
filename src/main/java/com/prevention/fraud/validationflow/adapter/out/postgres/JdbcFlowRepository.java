@@ -59,15 +59,40 @@ class JdbcFlowRepository implements FlowRepository {
 
 	@Override
 	public Optional<FlowDefinition> findById(String tenantId, UUID id) {
-		return jdbc.query("SELECT * FROM flow_definition WHERE tenant_id = ? AND id = ?", (rs, n) -> new FlowDefinition(
+		return jdbc.query("SELECT * FROM flow_definition WHERE tenant_id = ? AND id = ?", this::map, tenantId, id)
+				.stream().findFirst();
+	}
+
+	private FlowDefinition map(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+		return new FlowDefinition(
 				rs.getObject("id", UUID.class), rs.getString("tenant_id"), rs.getString("flow_key"),
 				rs.getInt("version"), FlowStatus.valueOf(rs.getString("status")), rs.getString("user_type"),
 				rs.getString("context"), rs.getString("display_name"), rs.getString("description"),
 				json.readValue(rs.getString("graph_definition"), new TypeReference<Map<String, Object>>() { }),
 				orEmpty(json.readValue(rs.getString("input_contract"), new TypeReference<List<InputField>>() { })),
 				json.readValue(rs.getString("metadata"), new TypeReference<Map<String, Object>>() { }),
-				rs.getString("created_by"), rs.getTimestamp("created_at").toInstant()), tenantId, id)
-				.stream().findFirst();
+				rs.getString("created_by"), rs.getTimestamp("created_at").toInstant());
+	}
+
+	@Override
+	public Page<FlowDefinition> list(String tenantId, String flowKey, FlowStatus status, String userType,
+			String context, int page, int size) {
+		StringBuilder where = new StringBuilder(" WHERE tenant_id = ?");
+		List<Object> args = new java.util.ArrayList<>(List.of(tenantId));
+		String[] cols = { "flow_key", "status", "user_type", "context" };
+		Object[] vals = { flowKey, status == null ? null : status.name(), userType, context };
+		for (int i = 0; i < cols.length; i++) {
+			if (vals[i] != null) {
+				where.append(" AND ").append(cols[i]).append(" = ?");
+				args.add(vals[i]);
+			}
+		}
+		long total = jdbc.queryForObject("SELECT count(*) FROM flow_definition" + where, Long.class, args.toArray());
+		args.add(size);
+		args.add((long) page * size);
+		List<FlowDefinition> items = jdbc.query("SELECT * FROM flow_definition" + where
+				+ " ORDER BY created_at DESC, flow_key, version DESC LIMIT ? OFFSET ?", this::map, args.toArray());
+		return new Page<>(items, total);
 	}
 
 	private static List<InputField> orEmpty(List<InputField> l) {

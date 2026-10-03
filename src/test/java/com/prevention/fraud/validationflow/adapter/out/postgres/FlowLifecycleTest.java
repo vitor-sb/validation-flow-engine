@@ -113,4 +113,20 @@ class FlowLifecycleTest {
 				.queryForObject("SELECT count(*) FROM flow_definition WHERE tenant_id='c' AND status='ACTIVE'", Integer.class));
 	}
 
+	@Test
+	void listFiltersPaginatesAndIsolatesTenants() {
+		service.createDraft("l1", "l1", cmd("lk", "LC"));
+		var v2 = service.createDraft("l1", "l1", cmd("lk", "LC"));
+		service.createDraft("l1", "l1", cmd("other", "LD"));
+		service.createDraft("l2", "l2", cmd("lk", "LC"));
+		service.activate("l1", v2.id());
+		assertEquals(3, service.list("l1", null, null, null, null, 0, 20).total());
+		assertEquals(2, service.list("l1", "lk", null, null, null, 0, 20).total());
+		assertEquals(1, service.list("l1", null, FlowStatus.ACTIVE, "PF", "LC", 0, 20).total());
+		var page = service.list("l1", null, null, null, null, 1, 2);
+		assertEquals(1, page.items().size());
+		assertEquals(3, page.total());
+		assertEquals(1, service.list("l2", null, null, null, null, 0, 20).total()); // no l1 rows leak
+	}
+
 }

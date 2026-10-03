@@ -38,6 +38,12 @@ public class FlowService {
 		return repository.findById(tenantId, id).orElseThrow(FlowException::notFound);
 	}
 
+	public FlowRepository.Page<FlowDefinition> list(String tenantId, String flowKey, FlowStatus status,
+			String userType, String context, int page, int size) {
+		return repository.list(tenantId, flowKey, status, userType, context, Math.max(page, 0),
+				Math.min(Math.max(size, 1), 100));
+	}
+
 	/** DRAFT is edited in place; ACTIVE spawns a new DRAFT version; ARCHIVED is immutable. flowKey comes from the stored flow. */
 	public FlowDefinition update(String tenantId, String updatedBy, UUID id, CreateFlow c) {
 		FlowDefinition f = get(tenantId, id);

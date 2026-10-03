@@ -14,12 +14,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.prevention.fraud.validationflow.application.FlowService;
 import com.prevention.fraud.validationflow.config.TenantPrincipal;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.FlowStatus;
 import com.prevention.fraud.validationflow.domain.GraphValidator;
 import com.prevention.fraud.validationflow.domain.InputField;
 
@@ -77,6 +79,19 @@ class FlowController {
 		return toResponse(service.createDraft(principal.tenantId(), principal.tenantId(),
 				new FlowService.CreateFlow(r.flowKey(), r.userType(), r.context(), r.displayName(),
 						r.description(), r.graphDefinition(), contract(r.inputContract()), r.metadata())));
+	}
+
+	record PageResponse(List<FlowResponse> items, int page, int size, long total) {
+	}
+
+	@GetMapping
+	PageResponse list(@AuthenticationPrincipal TenantPrincipal principal, @RequestParam(required = false) String flowKey,
+			@RequestParam(required = false) FlowStatus status, @RequestParam(required = false) String userType,
+			@RequestParam(required = false) String context, @RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "20") int size) {
+		var p = service.list(principal.tenantId(), flowKey, status, userType, context, page, size);
+		return new PageResponse(p.items().stream().map(FlowController::toResponse).toList(), Math.max(page, 0),
+				Math.min(Math.max(size, 1), 100), p.total());
 	}
 
 	@GetMapping("/{id}")

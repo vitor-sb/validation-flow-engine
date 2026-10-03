@@ -65,3 +65,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Repo transactions use a TransactionTemplate built from the JdbcTemplate's DataSource (no Spring beans needed, easy to construct in tests).
   - GET /flows/{id} already exists (US-007 only needs list + filters).
 ---
+## 2026-10-03 - US-007
+- GET /api/v1/flows lists the tenant's flows with filters flowKey/status/userType/context and page/size (size capped at 100, newest first) -> `{items,page,size,total}`. GET /flows/{id} (US-006) already returns 404 for other tenants.
+- Files: FlowRepository (list + Page record), FlowService.list, JdbcFlowRepository (list, shared row mapper `map`), FlowController, FlowLifecycleTest (filters/pagination/tenant isolation)
+- **Learnings for future iterations:**
+  - Filter columns are a fixed whitelist in JdbcFlowRepository.list (values always bound as params); extend the `cols`/`vals` arrays for new filters.
+  - Invalid `status` query value yields Spring's default 400 (not ErrorResponse).
+---
