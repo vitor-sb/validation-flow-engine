@@ -129,4 +129,36 @@ class FlowLifecycleTest {
 		assertEquals(1, service.list("l2", null, null, null, null, 0, 20).total()); // no l1 rows leak
 	}
 
+	@Test
+	void resolveActiveByFlowKeyOrSelectorIsTenantScopedAndNotFoundOtherwise() {
+		var f = service.createDraft("r1", "r1", cmd("rk", "RC"));
+		assertEquals(FlowException.Kind.NOT_FOUND, assertThrows(FlowException.class,
+				() -> service.resolveActive("r1", "rk", null, null)).kind()); // DRAFT is not resolvable
+		service.activate("r1", f.id());
+		assertEquals(f.id(), service.resolveActive("r1", "rk", null, null).id());
+		assertEquals(f.id(), service.resolveActive("r1", null, "PF", "RC").id());
+		assertEquals(f.id(), service.resolveActive("r1", "rk", "XX", "YY").id()); // flowKey wins, userType/context ignored
+		assertEquals(FlowException.Kind.NOT_FOUND, assertThrows(FlowException.class,
+				() -> service.resolveActive("r2", "rk", null, null)).kind());
+		assertEquals(FlowException.Kind.NOT_FOUND, assertThrows(FlowException.class,
+				() -> service.resolveActive("r2", null, "PF", "RC")).kind());
+	}
+
+	@Test
+	void moreThanOneActiveForSelectorIsInvalidConfigurationWithoutTieBreak() {
+		var one = service.createDraft("amb", "amb", cmd("a1", "AC"));
+		var two = service.createDraft("amb", "amb", cmd("a2", "AC"));
+		var svc = new FlowService(new JdbcFlowRepository(
+				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
+				JsonMapper.builder().build()) {
+			@Override
+			public java.util.List<com.prevention.fraud.validationflow.domain.FlowDefinition> findActive(String t,
+					String k, String u, String c) {
+				return java.util.List.of(one, two);
+			}
+		}, new GraphValidator(t -> false));
+		assertEquals(FlowException.Kind.INVALID_CONFIGURATION, assertThrows(FlowException.class,
+				() -> svc.resolveActive("amb", null, "PF", "AC")).kind());
+	}
+
 }

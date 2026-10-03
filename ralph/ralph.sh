@@ -96,7 +96,7 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   fi
   
   # Check for completion signal
-  if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
+  if jq -e 'all(.userStories[]; .passes == true)' "$PRD_FILE" > /dev/null 2>&1; then
     echo ""
     echo "Ralph completed all tasks!"
     echo "Completed at iteration $i of $MAX_ITERATIONS"

@@ -18,6 +18,7 @@ You are an autonomous coding agent working on a software project.
 ## Progress Report Format
 
 APPEND to progress.txt (never replace, always append):
+
 ```
 ## [Date/Time] - [Story ID]
 - What was implemented
@@ -58,12 +59,14 @@ Before committing, check if any edited files have learnings worth preserving in 
    - Configuration or environment requirements
 
 **Examples of good CLAUDE.md additions:**
+
 - "When modifying X, also update Y to keep them in sync"
 - "This module uses pattern Z for all API calls"
 - "Tests require the dev server running on PORT 3000"
 - "Field names must match the template exactly"
 
 **Do NOT add:**
+
 - Story-specific implementation details
 - Temporary debugging notes
 - Information already in progress.txt
@@ -91,10 +94,12 @@ If no browser tools are available, note in your progress report that manual brow
 
 After completing a user story, check if ALL stories have `passes: true`.
 
-If ALL stories are complete and passing, reply with:
+If ALL stories are complete and passing, reply with the completion tag alone on its own line:
 <promise>COMPLETE</promise>
 
 If there are still stories with `passes: false`, end your response normally (another iteration will pick up the next story).
+
+NEVER write the completion tag in any other context — not to say it doesn't apply yet, not when quoting these instructions, not in summaries. Do not mention it at all unless every story passes.
 
 ## Important
 

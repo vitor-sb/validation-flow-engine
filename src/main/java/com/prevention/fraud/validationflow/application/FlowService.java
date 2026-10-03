@@ -38,6 +38,18 @@ public class FlowService {
 		return repository.findById(tenantId, id).orElseThrow(FlowException::notFound);
 	}
 
+	/** Resolves the single ACTIVE version by flowKey when given, else by (userType, context). No tie-breaking. */
+	public FlowDefinition resolveActive(String tenantId, String flowKey, String userType, String context) {
+		List<FlowDefinition> active = repository.findActive(tenantId, flowKey, userType, context);
+		if (active.isEmpty()) {
+			throw FlowException.notFound();
+		}
+		if (active.size() > 1) {
+			throw FlowException.invalidConfiguration("more than one ACTIVE flow for the selector");
+		}
+		return active.get(0);
+	}
+
 	public FlowRepository.Page<FlowDefinition> list(String tenantId, String flowKey, FlowStatus status,
 			String userType, String context, int page, int size) {
 		return repository.list(tenantId, flowKey, status, userType, context, Math.max(page, 0),

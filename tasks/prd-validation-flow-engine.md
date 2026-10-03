@@ -251,6 +251,8 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - **FR-20:** Logs sem segredos, tokens ou dados pessoais desnecessários.
 - **FR-21:** Todas as APIs do MVP devem ser documentadas em um `openapi.yaml` versionado, validado no build e gerado a partir do código.
 - **FR-22:** O contrato de execução deve ser compatível com evolução para entrega assíncrona do resultado via callback (sem quebrar clientes síncronos do MVP).
+- **FR-23:** Multi-tenancy: toda query de repositório DEVE filtrar por `tenant_id`, obtido do `TenantPrincipal` autenticado — nunca do corpo da requisição. Toda story que adicionar acesso a dados deve incluir teste provando que o tenant A não lê nem modifica dados do tenant B.
+- **FR-24:** Violações de unique constraint devem retornar 409 Conflict com `ErrorResponse`, nunca 500.
 
 ## 5. Non-Goals (fora do escopo do MVP)
 

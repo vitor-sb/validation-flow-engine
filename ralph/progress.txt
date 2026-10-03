@@ -72,3 +72,9 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Filter columns are a fixed whitelist in JdbcFlowRepository.list (values always bound as params); extend the `cols`/`vals` arrays for new filters.
   - Invalid `status` query value yields Spring's default 400 (not ErrorResponse).
 ---
+## 2026-10-03 - US-008
+- `FlowService.resolveActive(tenantId, flowKey, userType, context)`: flowKey (non-blank) wins, else (userType, context); 0 ACTIVE -> FlowException.notFound (404 FLOW_NOT_FOUND); >1 -> `INVALID_CONFIGURATION` (500 INVALID_FLOW_CONFIGURATION), no tie-break. Service-level only (no endpoint; US-011+ will call it).
+- Files: FlowRepository.findActive (LIMIT 2 to detect ambiguity), JdbcFlowRepository, FlowService, FlowException, RestExceptionHandler, FlowLifecycleTest
+- **Learnings for future iterations:**
+  - The partial unique index makes >1 ACTIVE impossible in the DB, so the ambiguity test stubs the repo by subclassing JdbcFlowRepository.
+---

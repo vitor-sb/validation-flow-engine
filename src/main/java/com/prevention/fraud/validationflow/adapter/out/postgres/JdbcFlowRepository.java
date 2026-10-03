@@ -63,6 +63,15 @@ class JdbcFlowRepository implements FlowRepository {
 				.stream().findFirst();
 	}
 
+	@Override
+	public List<FlowDefinition> findActive(String tenantId, String flowKey, String userType, String context) {
+		return flowKey != null && !flowKey.isBlank()
+				? jdbc.query("SELECT * FROM flow_definition WHERE tenant_id = ? AND status = 'ACTIVE' AND flow_key = ? LIMIT 2",
+						this::map, tenantId, flowKey)
+				: jdbc.query("SELECT * FROM flow_definition WHERE tenant_id = ? AND status = 'ACTIVE' "
+						+ "AND user_type = ? AND context = ? LIMIT 2", this::map, tenantId, userType, context);
+	}
+
 	private FlowDefinition map(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
 		return new FlowDefinition(
 				rs.getObject("id", UUID.class), rs.getString("tenant_id"), rs.getString("flow_key"),

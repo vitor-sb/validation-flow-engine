@@ -21,6 +21,9 @@ public interface FlowRepository {
 	Page<FlowDefinition> list(String tenantId, String flowKey, FlowStatus status, String userType, String context,
 			int page, int size);
 
+	/** ACTIVE versions of the tenant matching flowKey (when non-null) or else (userType, context); at most 2 returned so callers can detect ambiguity. */
+	List<FlowDefinition> findActive(String tenantId, String flowKey, String userType, String context);
+
 	FlowDefinition save(FlowDefinition flow);
 
 	Optional<FlowDefinition> findById(String tenantId, UUID id);
