@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.junit.jupiter.Container;
@@ -18,6 +19,7 @@ import com.prevention.fraud.validationflow.domain.InputField;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Testcontainers(disabledWithoutDocker = true)
 class JdbcFlowRepositoryTest {
@@ -39,6 +41,13 @@ class JdbcFlowRepositoryTest {
 		var b = service.createDraft("b", "b", cmd);
 		assertEquals(1, b.version());
 		assertEquals(FlowStatus.DRAFT, b.status());
+		// tenant isolation: b's version counter ignores a's rows, and b's row is untouched by a's creates
+		assertEquals(3, repo.nextVersion("a", "kyc"));
+		assertEquals(2, repo.nextVersion("b", "kyc"));
+		// unique (tenant_id, flow_key, version) violation surfaces as DuplicateKeyException (mapped to 409)
+		assertThrows(DuplicateKeyException.class, () -> repo.save(new com.prevention.fraud.validationflow.domain.FlowDefinition(java.util.UUID.randomUUID(),
+				b.tenantId(), b.flowKey(), b.version(), b.status(), b.userType(), b.context(), b.displayName(),
+				b.description(), b.graphDefinition(), b.inputContract(), b.metadata(), b.createdBy(), b.createdAt())));
 	}
 
 }

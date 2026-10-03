@@ -1,6 +1,7 @@
 package com.prevention.fraud.validationflow;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -58,6 +59,13 @@ class FlowCreateTest {
 				.content("{\"flowKey\":\" \",\"userType\":\"PF\",\"context\":\"C\",\"displayName\":\"d\"}"))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
 				.andExpect(jsonPath("$.details").isArray());
+	}
+
+	@Test
+	void uniqueViolationReturns409WithErrorResponse() throws Exception {
+		when(repository.save(any())).thenThrow(new DuplicateKeyException("flow_definition_tenant_id_flow_key_version_key"));
+		mvc.perform(post("/api/v1/flows").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
+				.content(VALID)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONFLICT"));
 	}
 
 }

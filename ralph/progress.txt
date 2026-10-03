@@ -40,3 +40,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Services are plain classes in `application`, wired as beans in `config/FlowConfig` (keeps application free of Spring). JSON columns are written with JsonMapper (`tools.jackson`, Jackson 3) and `?::jsonb`.
   - Concurrent create of same key can hit the unique constraint (500); tolerated for MVP.
 ---
+## 2026-10-03 - US-004 (revalidation against globalRules)
+- Added DuplicateKeyException -> 409 `ErrorResponse(CONFLICT)` in RestExceptionHandler (was 500); test in FlowCreateTest (MockMvc) and real unique-violation test in JdbcFlowRepositoryTest.
+- Tenant isolation test: repo test asserts tenant a/b version counters are independent (a=3, b=2 next) and tenant comes from TenantPrincipal (FlowCreateTest ignores body `tenantId`).
+- Files: RestExceptionHandler, FlowService (comment), FlowCreateTest, JdbcFlowRepositoryTest
+- **Learnings for future iterations:**
+  - Any new unique-constraint path is already mapped to 409 globally by DuplicateKeyException handler; no per-endpoint code needed.
+  - Read/modify isolation tests for new queries (US-006/007) must assert tenant B gets 404/no rows for tenant A's ids.
+---

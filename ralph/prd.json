@@ -2,6 +2,10 @@
   "project": "Validation Flow Engine",
   "branchName": "ralph-branch",
   "description": "Validation Flow Engine (MVP)",
+  "globalRules": [
+    "Multi-tenancy: every repository query MUST filter by `tenant_id`, taken from the authenticated `TenantPrincipal` — never from the request body. Any story that adds data access must include a test proving tenant A cannot read or modify tenant B's data.",
+    "Unique-constraint violations must return 409 Conflict with `ErrorResponse`, never 500."
+  ],
   "userStories": [
     {
       "id": "US-001",
@@ -59,11 +63,13 @@
         "Fluxo criado com `status=DRAFT`, `version` gerada, `createdBy`/`createdAt` preenchidos",
         "Campos `@NotBlank`/`@NotNull` inválidos retornam 400 com `ErrorResponse`",
         "Dois tenants podem criar a mesma `flowKey` sem colisão",
-        "Build e testes passam"
+        "Build e testes passam",
+        "Toda query de repositório filtra por `tenant_id` vindo do `TenantPrincipal`, nunca do corpo da requisição; teste prova que o tenant A não lê nem modifica dados do tenant B",
+        "Violação de unique constraint (ex.: `tenant_id, flow_key, version`) retorna 409 Conflict com `ErrorResponse`, nunca 500 (coberto por teste)"
       ],
       "priority": 4,
       "passes": true,
-      "notes": ""
+      "notes": "Revalidar contra globalRules (tenant isolation e 409)."
     },
     {
       "id": "US-005",

@@ -1,5 +1,6 @@
 package com.prevention.fraud.validationflow.adapter.in.rest;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -21,6 +22,12 @@ class RestExceptionHandler {
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
 	ErrorResponse unreadable(HttpMessageNotReadableException e) {
 		return new ErrorResponse("MALFORMED_REQUEST", false, java.util.List.of("request body is not valid JSON"));
+	}
+
+	@ExceptionHandler(DuplicateKeyException.class)
+	@ResponseStatus(HttpStatus.CONFLICT)
+	ErrorResponse duplicate(DuplicateKeyException e) {
+		return new ErrorResponse("CONFLICT", true, java.util.List.of("resource already exists"));
 	}
 
 }

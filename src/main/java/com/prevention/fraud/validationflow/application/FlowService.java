@@ -22,7 +22,7 @@ public class FlowService {
 		this.repository = repository;
 	}
 
-	// ponytail: version = max+1 read then insert; a concurrent create of the same key hits the unique constraint (500). Retry if it matters.
+	// ponytail: version = max+1 read then insert; a concurrent create of the same key hits the unique constraint (409 via RestExceptionHandler). Retry server-side if clients need it hidden.
 	public FlowDefinition createDraft(String tenantId, String createdBy, CreateFlow c) {
 		return repository.save(new FlowDefinition(UUID.randomUUID(), tenantId, c.flowKey(),
 				repository.nextVersion(tenantId, c.flowKey()), FlowStatus.DRAFT, c.userType(), c.context(),
