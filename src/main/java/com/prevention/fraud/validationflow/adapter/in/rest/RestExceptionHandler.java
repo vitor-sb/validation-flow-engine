@@ -1,5 +1,7 @@
 package com.prevention.fraud.validationflow.adapter.in.rest;
 
+import com.prevention.fraud.validationflow.application.FlowException;
+
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -28,6 +30,19 @@ class RestExceptionHandler {
 	@ResponseStatus(HttpStatus.CONFLICT)
 	ErrorResponse duplicate(DuplicateKeyException e) {
 		return new ErrorResponse("CONFLICT", true, java.util.List.of("resource already exists"));
+	}
+
+	@ExceptionHandler(FlowException.class)
+	org.springframework.http.ResponseEntity<ErrorResponse> flow(FlowException e) {
+		return switch (e.kind()) {
+			case NOT_FOUND -> org.springframework.http.ResponseEntity.status(HttpStatus.NOT_FOUND)
+					.body(new ErrorResponse("FLOW_NOT_FOUND", false, java.util.List.of(e.getMessage())));
+			case CONFLICT -> org.springframework.http.ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new ErrorResponse("CONFLICT", false, java.util.List.of(e.getMessage())));
+			case INVALID -> org.springframework.http.ResponseEntity.unprocessableContent()
+					.body(new ErrorResponse("INVALID_FLOW", false,
+							e.errors().stream().map(g -> g.code() + ": " + g.message()).toList()));
+		};
 	}
 
 }

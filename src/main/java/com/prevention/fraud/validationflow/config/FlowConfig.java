@@ -11,8 +11,8 @@ import com.prevention.fraud.validationflow.domain.GraphValidator;
 class FlowConfig {
 
 	@Bean
-	FlowService flowService(FlowRepository repository) {
-		return new FlowService(repository);
+	FlowService flowService(FlowRepository repository, GraphValidator graphValidator) {
+		return new FlowService(repository, graphValidator);
 	}
 
 	// ponytail: no validator registry yet (US-010), so no validatorType is known; the registry replaces this predicate

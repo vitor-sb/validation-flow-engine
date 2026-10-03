@@ -56,3 +56,12 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Validator registry doesn't exist yet: `GraphValidator` takes a `Predicate<String>` wired in FlowConfig as `type -> false`; US-010 must replace it with the registry lookup.
   - US-006 activation should call `graphValidator.validate(...)` and return 422 when errors are non-empty. Sub-flow depth is only checked per node (`maxDepth` <= 3); cross-flow cyclic composition (A->B->A) is not checked yet (US-015).
 ---
+## 2026-10-03 - US-006
+- PUT /flows/{id} (DRAFT: edit in place; ACTIVE: new DRAFT version; ARCHIVED: 409), PATCH activate (validates graph -> 422 INVALID_FLOW; non-DRAFT -> 409), PATCH archive, GET /flows/{id}. Cross-tenant ids -> 404 FLOW_NOT_FOUND.
+- Atomic activation in JdbcFlowRepository.activate: archive current ACTIVE of the selector + activate in one TransactionTemplate; `WHERE status='DRAFT'` guards double-activation, partial unique index makes the loser fail (DuplicateKeyException -> 409).
+- Files: application/{FlowService,FlowRepository,FlowException}, JdbcFlowRepository, FlowController, RestExceptionHandler, FlowConfig, FlowLifecycleTest (Docker: lifecycle, tenant isolation, concurrency), FlowCreateTest
+- **Learnings for future iterations:**
+  - Business errors: throw `FlowException` (notFound/conflict/invalid) from application; the REST handler maps it. FlowService now takes a GraphValidator.
+  - Repo transactions use a TransactionTemplate built from the JdbcTemplate's DataSource (no Spring beans needed, easy to construct in tests).
+  - GET /flows/{id} already exists (US-007 only needs list + filters).
+---

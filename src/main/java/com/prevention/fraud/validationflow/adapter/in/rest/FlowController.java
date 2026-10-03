@@ -7,7 +7,11 @@ import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -40,6 +44,11 @@ class FlowController {
 			List<InputField> inputContract, Map<String, Object> metadata, String createdBy, Instant createdAt) {
 	}
 
+	record UpdateFlowRequest(@NotBlank String userType, @NotBlank String context, @NotBlank String displayName,
+			String description, @NotNull Map<String, Object> graphDefinition, Map<String, Object> metadata,
+			@Valid List<InputFieldRequest> inputContract) {
+	}
+
 	record ValidateRequest(@NotNull Map<String, Object> graphDefinition) {
 	}
 
@@ -64,12 +73,40 @@ class FlowController {
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	FlowResponse create(@AuthenticationPrincipal TenantPrincipal principal, @Valid @RequestBody CreateFlowRequest r) {
-		List<InputField> contract = r.inputContract() == null ? List.of()
-				: r.inputContract().stream().map(f -> new InputField(f.name(), f.type(), f.required())).toList();
 		// ponytail: principal carries only the tenant, so createdBy is the tenant until credentials have a subject
-		FlowDefinition f = service.createDraft(principal.tenantId(), principal.tenantId(),
+		return toResponse(service.createDraft(principal.tenantId(), principal.tenantId(),
 				new FlowService.CreateFlow(r.flowKey(), r.userType(), r.context(), r.displayName(),
-						r.description(), r.graphDefinition(), contract, r.metadata()));
+						r.description(), r.graphDefinition(), contract(r.inputContract()), r.metadata())));
+	}
+
+	@GetMapping("/{id}")
+	FlowResponse get(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id) {
+		return toResponse(service.get(principal.tenantId(), id));
+	}
+
+	@PutMapping("/{id}")
+	FlowResponse update(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id,
+			@Valid @RequestBody UpdateFlowRequest r) {
+		return toResponse(service.update(principal.tenantId(), principal.tenantId(), id,
+				new FlowService.CreateFlow(null, r.userType(), r.context(), r.displayName(), r.description(),
+						r.graphDefinition(), contract(r.inputContract()), r.metadata())));
+	}
+
+	@PatchMapping("/{id}/activate")
+	FlowResponse activate(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id) {
+		return toResponse(service.activate(principal.tenantId(), id));
+	}
+
+	@PatchMapping("/{id}/archive")
+	FlowResponse archive(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id) {
+		return toResponse(service.archive(principal.tenantId(), id));
+	}
+
+	private static List<InputField> contract(List<InputFieldRequest> in) {
+		return in == null ? List.of() : in.stream().map(f -> new InputField(f.name(), f.type(), f.required())).toList();
+	}
+
+	private static FlowResponse toResponse(FlowDefinition f) {
 		return new FlowResponse(f.id(), f.flowKey(), f.version(), f.status().name(), f.userType(), f.context(),
 				f.displayName(), f.description(), f.graphDefinition(), f.inputContract(), f.metadata(),
 				f.createdBy(), f.createdAt());

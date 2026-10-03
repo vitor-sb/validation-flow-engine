@@ -1,0 +1,116 @@
+package com.prevention.fraud.validationflow.adapter.out.postgres;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+import com.prevention.fraud.validationflow.application.FlowException;
+import com.prevention.fraud.validationflow.application.FlowService;
+import com.prevention.fraud.validationflow.domain.FlowStatus;
+import com.prevention.fraud.validationflow.domain.GraphValidator;
+
+import tools.jackson.databind.json.JsonMapper;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+@Testcontainers(disabledWithoutDocker = true)
+class FlowLifecycleTest {
+
+	@Container
+	static PostgreSQLContainer pg = new PostgreSQLContainer("postgres:16");
+
+	static JdbcFlowRepository repo;
+
+	static FlowService service;
+
+	static final Map<String, Object> GRAPH = Map.of("startNodeId", "s", "nodes", Map.of(
+			"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "e"))),
+			"e", Map.of("type", "END")));
+
+	@BeforeAll
+	static void setUp() {
+		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
+		repo = new JdbcFlowRepository(
+				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
+				JsonMapper.builder().build());
+		service = new FlowService(repo, new GraphValidator(t -> false));
+	}
+
+	static FlowService.CreateFlow cmd(String key, String ctx) {
+		return new FlowService.CreateFlow(key, "PF", ctx, "d", null, GRAPH, List.of(), null);
+	}
+
+	@Test
+	void activationArchivesPreviousPutOnActiveCreatesDraftAndArchivedStaysReadable() {
+		var v1 = service.createDraft("a", "a", cmd("k1", "C1"));
+		assertEquals(FlowStatus.ACTIVE, service.activate("a", v1.id()).status());
+		var v2 = service.update("a", "a", v1.id(), cmd(null, "C1"));
+		assertEquals(FlowStatus.DRAFT, v2.status());
+		assertEquals(2, v2.version());
+		assertEquals(FlowStatus.ACTIVE, service.get("a", v1.id()).status()); // active untouched
+		service.activate("a", v2.id());
+		assertEquals(FlowStatus.ARCHIVED, service.get("a", v1.id()).status());
+		assertEquals(FlowStatus.ACTIVE, service.get("a", v2.id()).status());
+		// archived graph is immutable
+		assertEquals(FlowException.Kind.CONFLICT,
+				assertThrows(FlowException.class, () -> service.update("a", "a", v1.id(), cmd(null, "C1"))).kind());
+		// draft is edited in place
+		var d = service.createDraft("a", "a", cmd("k2", "C2"));
+		assertEquals("C3", service.update("a", "a", d.id(), cmd(null, "C3")).context());
+	}
+
+	@Test
+	void tenantBCannotReadOrModifyTenantAFlow() {
+		var f = service.createDraft("ta", "ta", cmd("iso", "CI"));
+		for (Runnable op : List.<Runnable>of(() -> service.get("tb", f.id()),
+				() -> service.update("tb", "tb", f.id(), cmd(null, "CI")), () -> service.activate("tb", f.id()),
+				() -> service.archive("tb", f.id()))) {
+			assertEquals(FlowException.Kind.NOT_FOUND, assertThrows(FlowException.class, op::run).kind());
+		}
+		assertFalse(repo.activate("tb", f.id()));
+		assertFalse(repo.archive("tb", f.id()));
+		assertEquals(FlowStatus.DRAFT, service.get("ta", f.id()).status());
+	}
+
+	@Test
+	void concurrentActivationOfSameSelectorOnlyOneSucceeds() throws Exception {
+		var a = service.createDraft("c", "c", cmd("ca", "CC"));
+		var b = service.createDraft("c", "c", cmd("cb", "CC"));
+		var start = new CountDownLatch(1);
+		var pool = Executors.newFixedThreadPool(2);
+		List<Callable<Boolean>> tasks = List.of(a, b).stream().<Callable<Boolean>>map(f -> () -> {
+			start.await();
+			try {
+				return repo.activate("c", f.id());
+			}
+			catch (DuplicateKeyException e) {
+				return false;
+			}
+		}).toList();
+		var futures = tasks.stream().map(pool::submit).toList();
+		start.countDown();
+		int wins = 0;
+		for (var f : futures) {
+			wins += f.get() ? 1 : 0;
+		}
+		pool.shutdown();
+		assertEquals(1, wins);
+		assertEquals(1, new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()))
+				.queryForObject("SELECT count(*) FROM flow_definition WHERE tenant_id='c' AND status='ACTIVE'", Integer.class));
+	}
+
+}

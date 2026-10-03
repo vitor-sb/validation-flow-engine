@@ -33,7 +33,7 @@ class JdbcFlowRepositoryTest {
 		var repo = new JdbcFlowRepository(
 				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
 				JsonMapper.builder().build());
-		var service = new FlowService(repo);
+		var service = new FlowService(repo, new com.prevention.fraud.validationflow.domain.GraphValidator(t -> false));
 		var cmd = new FlowService.CreateFlow("kyc", "PF", "ONB", "KYC", null, Map.of("nodes", List.of()),
 				List.of(new InputField("cpf", "STRING", true)), null);
 		assertEquals(1, service.createDraft("a", "a", cmd).version());

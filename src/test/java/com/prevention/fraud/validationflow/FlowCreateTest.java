@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 				+ "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
 				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
 		"app.security.api-keys[0].key=k", "app.security.api-keys[0].tenant-id=t1",
-		"app.security.api-keys[0].scopes=flow:write"
+		"app.security.api-keys[0].scopes=flow:write,flow:activate,flow:read"
 })
 @AutoConfigureMockMvc
 class FlowCreateTest {
@@ -75,6 +75,25 @@ class FlowCreateTest {
 				.andExpect(status().isOk()).andExpect(jsonPath("$.valid").value(false))
 				.andExpect(jsonPath("$.errors[0].code").exists());
 		org.mockito.Mockito.verifyNoInteractions(repository);
+	}
+
+	@Test
+	void activateInvalidGraphReturns422() throws Exception {
+		var id = java.util.UUID.randomUUID();
+		when(repository.findById("t1", id)).thenReturn(java.util.Optional.of(new com.prevention.fraud.validationflow.domain.FlowDefinition(
+				id, "t1", "kyc", 1, com.prevention.fraud.validationflow.domain.FlowStatus.DRAFT, "PF", "C", "d", null,
+				java.util.Map.of("nodes", java.util.Map.of()), java.util.List.of(), null, "t1", java.time.Instant.now())));
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/v1/flows/" + id + "/activate")
+				.header("X-API-Key", "k")).andExpect(status().isUnprocessableContent())
+				.andExpect(jsonPath("$.code").value("INVALID_FLOW"));
+		org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).activate(any(), any());
+	}
+
+	@Test
+	void unknownFlowReturns404() throws Exception {
+		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+				.patch("/api/v1/flows/" + java.util.UUID.randomUUID() + "/archive").header("X-API-Key", "k"))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("FLOW_NOT_FOUND"));
 	}
 
 }
