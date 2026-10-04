@@ -32,8 +32,12 @@ class SecurityConfig {
 						.requestMatchers(HttpMethod.PUT, "/api/v1/flows/*").hasAuthority("SCOPE_flow:write")
 						.requestMatchers(HttpMethod.GET, "/api/v1/flows/**", "/api/v1/node-types/**")
 								.hasAuthority("SCOPE_flow:read")
+						// HEAD is served by the GET handlers, so it needs the same scope
+						.requestMatchers(HttpMethod.HEAD, "/api/v1/flows/**", "/api/v1/node-types/**")
+								.hasAuthority("SCOPE_flow:read")
 						.requestMatchers(HttpMethod.POST, "/api/v1/executions").hasAuthority("SCOPE_validation:execute")
 						.requestMatchers(HttpMethod.GET, "/api/v1/executions/**").hasAuthority("SCOPE_validation:read")
+						.requestMatchers(HttpMethod.HEAD, "/api/v1/executions/**").hasAuthority("SCOPE_validation:read")
 						.anyRequest().authenticated())
 				.build();
 	}
