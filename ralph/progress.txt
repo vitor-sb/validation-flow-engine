@@ -169,3 +169,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - A child with no ACTIVE version is not an activation error (only runtime); a runtime cycle can't be built via the API because the last activation in the loop is rejected, so only activation cycles are tested.
   - No new endpoint, so no HTTP test; sub-flow tests are service-level in ExecutionTest (tenant isolation: other tenant's child -> SUB_FLOW_NOT_FOUND).
 ---
+## 2026-10-03 - US-016
+- MultiTenancyTest (MockMvc + real Postgres, tenants mt-a/mt-b): same flowKey -> independent versions/lists/executions (A at v2, B at v1); persisted flow_execution has tenant_id, flow_version, context_data (and audit rows carry tenant_id); tenant B gets 404 FLOW_NOT_FOUND on GET/activate/archive/PUT/execute of A's flow, and A's flow is unchanged afterwards. No production code changes were needed: isolation already held.
+- Files: src/test/.../MultiTenancyTest.java, ralph/prd.json
+- **Learnings for future iterations:**
+  - GET /flows needs scope `flow:read` (a 403 instead of 404 in a cross-tenant test means a missing scope in the test api-keys).
+  - Test classes sharing the same Postgres container must use unique flowKey/context per test (versions accumulate; ACTIVE is unique per tenant+userType+context).
+---
