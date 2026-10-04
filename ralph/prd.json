@@ -416,13 +416,16 @@
       "acceptanceCriteria": [
         "`flow_execution.input_data` é gravado com `LogMasker.maskSecrets` (JdbcExecutionRepository.insert / ExecutionService.run); o motor continua usando o input original em memória",
         "`observed` de `TRANSITION_EVALUATED` em `execution_audit_log` não grava o valor quando o campo da condição é de credencial (ex.: `inputData.token`); mascarar também `observed` de AND/OR/NOT",
-        "Mensagens livres de validators/exceções (`ValidatorException`/`RuntimeException` -> `node_execution.error_info`, `flow_execution.error_info`, logs) não gravam valores de credenciais do input (ex.: substituir o valor literal das credenciais conhecidas do input por `***`); `flow_execution.error_info` também passa pela máscara",
+        "Exceções inesperadas (qualquer coisa que não seja `ValidatorException` ou erro de domínio conhecido, ex.: o `catch (RuntimeException)` de `runWithRetry` e de `run`): `e.getMessage()` NÃO é persistido nem devolvido. `error_info` recebe só um código genérico, a classe da exceção (`e.getClass().getName()`) e uma mensagem fixa; a mensagem original vai apenas para o log, passando pela máscara",
+        "`ValidatorException`: a mensagem continua sendo persistida como está (responsabilidade de quem escreve o validador); o Javadoc de `ValidatorException` e de `ValidatorStrategy` documenta que mensagens não podem conter credenciais nem dados de entrada",
+        "`RestExceptionHandler.unexpected`: o log do stack trace continua; a resposta HTTP nunca inclui a mensagem da exceção (hoje já devolve a mensagem fixa \"unexpected error\"; manter e cobrir com teste HTTP que força uma exceção com segredo na mensagem)",
+        "`flow_execution.error_info` recebe o mesmo tratamento de `node_execution.error_info` (mesma regra acima e mesma máscara por chave); sem regex para detectar segredos dentro de strings",
         "Teste de integração com Postgres real: envia `token` no input com condição sobre `inputData.token`, validator que falha com o token na mensagem; depois verifica que o valor não aparece em NENHUMA tabela (varre todas as tabelas via `::text`) nem na saída de log capturada",
         "Build e testes passam"
       ],
       "priority": 27,
       "passes": false,
-      "notes": "Confirmado em execução real: input_data = {\"token\": \"SECRET-TOKEN-123\"} e audit observed = \"SECRET-TOKEN-123\" em texto puro. Também sem máscara: flow_execution.error_info (ExecutionService.save) e mensagens de erro persistidas/logadas só mascaradas por nome de chave."
+      "notes": "Confirmado em execução real: input_data = {\"token\": \"SECRET-TOKEN-123\"} e audit observed = \"SECRET-TOKEN-123\" em texto puro. Também sem máscara: flow_execution.error_info (ExecutionService.save) e mensagens de erro persistidas/logadas só mascaradas por nome de chave. Confirmado: RestExceptionHandler.unexpected (linha 62-64) já devolve só 'unexpected error' na resposta; só o log leva a exceção."
     }
   ]
 }
