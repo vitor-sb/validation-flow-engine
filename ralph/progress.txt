@@ -129,3 +129,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Framework-error details come from ProblemDetail (`ErrorResponseException.getBody().getDetail()`), which is safe to expose.
   - The catch-all logs a stack trace at ERROR in tests; expected noise.
 ---
+## 2026-10-03 - US-021
+- ExecutionHttpTest: full-context MockMvc test on real Postgres (`@Import(TestcontainersConfiguration)`, two tenants via api-keys properties) covering GET /executions/{id}, /{id}/nodes, list pagination (page/size, size>100 or 0 -> 400 BAD_REQUEST, total), 404 EXECUTION_NOT_FOUND for unknown id, and cross-tenant 404 + list exclusion.
+- Files: src/test/.../ExecutionHttpTest.java
+- **Learnings for future iterations:**
+  - HTTP tests that need real data: set up via the API itself (POST flows with `displayName` required -> PATCH activate -> POST executions); a START->END flow needs no validator bean.
+  - The Postgres container is shared across test classes with the same context config, so list totals can include other tests' rows: assert >= / hasItem, not exact totals.
+---

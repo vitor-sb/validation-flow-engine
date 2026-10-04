@@ -1,0 +1,112 @@
+package com.prevention.fraud.validationflow;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import tools.jackson.databind.json.JsonMapper;
+
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/** HTTP-level tests of the execution read endpoints against a real Postgres (two tenants). */
+@SpringBootTest(properties = {
+		"app.security.api-keys[0].key=ka", "app.security.api-keys[0].tenant-id=ta",
+		"app.security.api-keys[0].scopes=flow:write,flow:activate,validation:read,validation:execute",
+		"app.security.api-keys[1].key=kb", "app.security.api-keys[1].tenant-id=tb",
+		"app.security.api-keys[1].scopes=flow:write,flow:activate,validation:read,validation:execute"
+})
+@AutoConfigureMockMvc
+@Import(TestcontainersConfiguration.class)
+class ExecutionHttpTest {
+
+	private static final String FLOW = """
+			{"flowKey":"%s","userType":"PF","context":"HTTP","displayName":"d","inputContract":[],
+			 "graphDefinition":{"startNodeId":"s","nodes":{
+			   "s":{"type":"START","transitions":[{"to":"e"}]},"e":{"type":"END"}}}}""";
+
+	@Autowired
+	MockMvc mvc;
+
+	@Autowired
+	JsonMapper json;
+
+	private String body(org.springframework.test.web.servlet.ResultActions r) throws Exception {
+		return r.andReturn().getResponse().getContentAsString();
+	}
+
+	private String id(String content) {
+		return json.readTree(content).get("id") != null ? json.readTree(content).get("id").asString()
+				: json.readTree(content).get("executionId").asString();
+	}
+
+	/** Creates + activates a trivial flow for the tenant and runs one execution; returns the execution id. */
+	private String runExecution(String key, String flowKey) throws Exception {
+		String flowId = id(body(mvc.perform(post("/api/v1/flows").header("X-API-Key", key)
+				.contentType(MediaType.APPLICATION_JSON).content(FLOW.formatted(flowKey))).andExpect(status().isCreated())));
+		mvc.perform(patch("/api/v1/flows/" + flowId + "/activate").header("X-API-Key", key)).andExpect(status().isOk());
+		return id(body(mvc.perform(post("/api/v1/executions").header("X-API-Key", key)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"flowKey\":\"" + flowKey + "\",\"userType\":\"PF\",\"context\":\"HTTP\",\"inputData\":{}}"))
+				.andExpect(status().isCreated())));
+	}
+
+	@Test
+	void getByIdAndNodesSucceed() throws Exception {
+		String exec = runExecution("ka", "get-ok");
+		mvc.perform(get("/api/v1/executions/" + exec).header("X-API-Key", "ka")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.executionId").value(exec)).andExpect(jsonPath("$.flowKey").value("get-ok"))
+				.andExpect(jsonPath("$.status").value("COMPLETED"));
+		mvc.perform(get("/api/v1/executions/" + exec + "/nodes").header("X-API-Key", "ka")).andExpect(status().isOk())
+				.andExpect(jsonPath("$", hasSize(2))).andExpect(jsonPath("$[*].nodeId").value(hasItem("e")));
+	}
+
+	@Test
+	void unknownIdIs404ExecutionNotFound() throws Exception {
+		String missing = java.util.UUID.randomUUID().toString();
+		for (String path : new String[] { "", "/nodes" }) {
+			mvc.perform(get("/api/v1/executions/" + missing + path).header("X-API-Key", "ka"))
+					.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("EXECUTION_NOT_FOUND"));
+		}
+	}
+
+	@Test
+	void otherTenantsExecutionIs404AndListExcludesIt() throws Exception {
+		String exec = runExecution("ka", "iso");
+		for (String path : new String[] { "", "/nodes" }) {
+			mvc.perform(get("/api/v1/executions/" + exec + path).header("X-API-Key", "kb"))
+					.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("EXECUTION_NOT_FOUND"));
+		}
+		mvc.perform(get("/api/v1/executions?size=100").header("X-API-Key", "kb")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[*].executionId").value(not(hasItem(exec))));
+		mvc.perform(get("/api/v1/executions?size=100").header("X-API-Key", "ka")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.items[*].executionId").value(hasItem(exec)));
+	}
+
+	@Test
+	void listPaginatesAndCapsSize() throws Exception {
+		for (int i = 0; i < 3; i++) {
+			runExecution("kb", "page" + i);
+		}
+		mvc.perform(get("/api/v1/executions?page=0&size=2").header("X-API-Key", "kb")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.items", hasSize(2))).andExpect(jsonPath("$.page").value(0))
+				.andExpect(jsonPath("$.size").value(2)).andExpect(jsonPath("$.total").value(org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
+		mvc.perform(get("/api/v1/executions?page=1&size=2").header("X-API-Key", "kb")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.items", hasSize(org.hamcrest.Matchers.greaterThanOrEqualTo(1))))
+				.andExpect(jsonPath("$.page").value(1));
+		mvc.perform(get("/api/v1/executions?size=101").header("X-API-Key", "kb")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+		mvc.perform(get("/api/v1/executions?size=0").header("X-API-Key", "kb")).andExpect(status().isBadRequest());
+	}
+
+}
