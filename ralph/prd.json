@@ -331,8 +331,8 @@
         "Build e testes passam"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Groups are supported only on DECISION nodes (config.params.documentGroups); graph-level groups not implemented."
     },
     {
       "id": "US-018",

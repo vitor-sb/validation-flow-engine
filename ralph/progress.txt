@@ -176,3 +176,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - GET /flows needs scope `flow:read` (a 403 instead of 404 in a cross-tenant test means a missing scope in the test api-keys).
   - Test classes sharing the same Postgres container must use unique flowKey/context per test (versions accumulate; ACTIVE is unique per tenant+userType+context).
 ---
+## 2026-10-03 - US-017
+- Document groups live in a DECISION node's `config.params.documentGroups` (snapshot-versioned): `[{name (unique), condition?, items[{document | oneOf (2+ alternatives), condition?}]}]`. At runtime `domain/DocumentGroups.resolve` evaluates each group's condition (e.g. `inputData.groups CONTAINS "X"`) and item conditions; output `{groups[{name,selected,observed}], documents[{group,kind REQUIRED|ONE_OF,document|options}]}` is stored in ctx `nodes.<id>` (-> flow_execution.context_data / result) and node_execution.output_data. GraphValidator code INVALID_DOCUMENT_GROUP (bad shape, or groups on a non-DECISION node).
+- Files: domain/{DocumentGroups,GraphValidator}, application/ExecutionService, ExecutionTest, GraphValidatorTest, ralph/prd.json
+- **Learnings for future iterations:**
+  - Graph-level groups (outside a node) were not implemented; the criterion allows either. Only DECISION nodes resolve groups; transitions can branch on `nodes.<id>.documents`/`groups`.
+  - No new endpoint, so no HTTP test; end-to-end test is service-level in ExecutionTest.
+---

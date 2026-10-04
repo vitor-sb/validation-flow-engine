@@ -155,4 +155,30 @@ class GraphValidatorTest {
 		return g;
 	}
 
+	@Test
+	void documentGroupsShapeAndPlacement() {
+		Map<String, Object> ok = Map.of("name", "g", "items", List.of(Map.of("document", "CPF"), Map.of("oneOf", List.of("RG", "CNH"))));
+		Consumer<Map<String, Object>> onDecision = g -> {
+			nodes(g).put("dec", node("DECISION", new HashMap<>(Map.of("params", Map.of("documentGroups", List.of(ok)))), "end"));
+			withTransition(g, "dec");
+		};
+		Map<String, Object> g = valid();
+		onDecision.accept(g);
+		assertEquals(List.of(), validator.validate(g));
+		expect("INVALID_DOCUMENT_GROUP", x -> cfg(x, "check").put("params", Map.of("documentGroups", List.of(ok))));
+		for (Object bad : List.of(List.of(), List.of(Map.of("name", "g", "items", List.of(Map.of("oneOf", List.of("RG"))))),
+				List.of(Map.of("name", "g", "items", List.of(Map.of("document", "A", "oneOf", List.of("B", "C"))))),
+				List.of(ok, ok))) {
+			expect("INVALID_DOCUMENT_GROUP", x -> {
+				nodes(x).put("dec", node("DECISION", new HashMap<>(Map.of("params", Map.of("documentGroups", bad))), "end"));
+				withTransition(x, "dec");
+			});
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	static void withTransition(Map<String, Object> g, String to) {
+		((Map<String, Object>) nodes(g).get("start")).put("transitions", List.of(Map.of("to", "check"), Map.of("to", to)));
+	}
+
 }

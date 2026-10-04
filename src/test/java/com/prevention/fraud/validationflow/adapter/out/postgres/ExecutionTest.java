@@ -418,4 +418,29 @@ class ExecutionTest {
 		assertEquals("SUB_FLOW_DEPTH_EXCEEDED", childError.get("code"));
 	}
 
+	@Test
+	void documentGroupsAreSelectedByConditionAndRecordedInTheExecution() {
+		Map<String, Object> groups = Map.of("documentGroups", List.of(
+				Map.of("name", "base", "items", List.of(Map.of("document", "CPF"), Map.of("oneOf", List.of("RG", "CNH")),
+						Map.of("document", "PROOF", "condition", cond("inputData.rural", true)))),
+				Map.of("name", "X", "condition", Map.of("operator", "CONTAINS", "field", "inputData.groups", "value", "X"),
+						"items", List.of(Map.of("document", "SPECIAL")))));
+		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "d"))),
+				"d", Map.of("type", "DECISION", "config", Map.of("params", groups), "transitions", List.of(Map.of("to", "e"))),
+				"e", Map.of("type", "END")));
+		activate("dg", "DG", g, List.of());
+		FlowExecution with = executions.execute("t", "dg", null, null, Map.of("groups", List.of("X"), "rural", true), null);
+		assertEquals(ExecutionStatus.COMPLETED, with.status(), String.valueOf(with.errorInfo()));
+		var out = (Map<?, ?>) ((Map<?, ?>) with.contextData().get("nodes")).get("d");
+		assertEquals(4, ((List<?>) out.get("documents")).size()); // CPF, RG|CNH, PROOF, SPECIAL
+		assertEquals(List.of(true, true), ((List<?>) out.get("groups")).stream().map(x -> ((Map<?, ?>) x).get("selected")).toList());
+		assertTrue(jdbc.queryForObject("SELECT output_data::text FROM node_execution WHERE execution_id = ? AND node_id = 'd'",
+				String.class, with.id()).contains("SPECIAL"));
+		FlowExecution without = executions.execute("t", "dg", null, null, Map.of("groups", List.of("Y")), null);
+		var out2 = (Map<?, ?>) ((Map<?, ?>) without.contextData().get("nodes")).get("d");
+		assertEquals(2, ((List<?>) out2.get("documents")).size()); // CPF, RG|CNH only
+		assertEquals(List.of(true, false), ((List<?>) out2.get("groups")).stream().map(x -> ((Map<?, ?>) x).get("selected")).toList());
+	}
+
 }

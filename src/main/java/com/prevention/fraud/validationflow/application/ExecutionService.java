@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.prevention.fraud.validationflow.domain.ConditionEvaluator;
+import com.prevention.fraud.validationflow.domain.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
@@ -192,7 +193,16 @@ public class ExecutionService {
 			String type = (String) node.get("type");
 			Map<String, Object> config = node.get("config") == null ? Map.of() : (Map<String, Object>) node.get("config");
 			switch (type) {
-				case "START", "DECISION" -> recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
+				case "START" -> recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
+				case "DECISION" -> {
+					Object groups = ((Map<String, Object>) config.getOrDefault("params", Map.of())).get("documentGroups");
+					Map<String, Object> out = groups == null ? Map.of()
+							: DocumentGroups.resolve((List<Map<String, Object>>) groups, ctx);
+					if (groups != null) {
+						((Map<String, Object>) ctx.get("nodes")).put(id, out);
+					}
+					recordNode(ex, id, type, 1, "COMPLETED", out, null, ctx, Instant.now());
+				}
 				case "VALIDATION" -> {
 					ValidatorStrategy v = registry.find((String) config.get("validatorType")).orElse(null);
 					if (v == null) {

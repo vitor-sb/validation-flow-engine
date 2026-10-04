@@ -101,6 +101,11 @@ public class GraphValidator {
 				errors.add(err("INVALID_TIMEOUT", id, "timeout must be a positive ISO-8601 duration"));
 			}
 		}
+		Object groups = map(config.get("params")).get("documentGroups");
+		if (groups != null && (!"DECISION".equals(type) || !DocumentGroups.valid(groups, GraphValidator::validCondition))) {
+			errors.add(err("INVALID_DOCUMENT_GROUP", id, "params.documentGroups is only allowed on DECISION nodes, as a list of "
+					+ "{name (unique), condition?, items[{document | oneOf (2+), condition?}]}"));
+		}
 		if (config.containsKey("retryPolicy")) {
 			Map<String, Object> rp = map(config.get("retryPolicy"));
 			if (!(rp.get("maxAttempts") instanceof Integer n) || n < 1
