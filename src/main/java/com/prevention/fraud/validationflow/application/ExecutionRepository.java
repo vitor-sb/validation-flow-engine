@@ -31,7 +31,7 @@ public interface ExecutionRepository {
 	void audit(String tenantId, UUID executionId, String eventType, String nodeId, Map<String, Object> details);
 
 	/** Atomically claims (tenant, key); false if already claimed. */
-	boolean claimIdempotency(String tenantId, String key, String requestHash);
+	boolean claimIdempotency(String tenantId, String key, String requestHash, java.time.Duration lease);
 
 	/** The claim as (requestHash, executionId or null while the winner is still running). */
 	java.util.Optional<IdempotencyClaim> findIdempotency(String tenantId, String key);

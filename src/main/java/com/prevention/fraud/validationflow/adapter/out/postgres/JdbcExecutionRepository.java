@@ -123,9 +123,14 @@ class JdbcExecutionRepository implements ExecutionRepository {
 	}
 
 	@Override
-	public boolean claimIdempotency(String tenantId, String key, String requestHash) {
-		return jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash) VALUES (?, ?, ?) "
-				+ "ON CONFLICT DO NOTHING", tenantId, key, requestHash) == 1;
+	public boolean claimIdempotency(String tenantId, String key, String requestHash, java.time.Duration lease) {
+		// an orphaned claim (no execution_id, lease expired) is taken over atomically; the row lock gives one winner
+		return jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
+				+ "VALUES (?, ?, ?, now() + make_interval(secs => ?)) "
+				+ "ON CONFLICT (tenant_id, idempotency_key) DO UPDATE SET request_hash = EXCLUDED.request_hash, "
+				+ "locked_until = EXCLUDED.locked_until, created_at = now() "
+				+ "WHERE idempotency_key.execution_id IS NULL AND idempotency_key.locked_until < now()",
+				tenantId, key, requestHash, lease.toMillis() / 1000.0) == 1;
 	}
 
 	@Override

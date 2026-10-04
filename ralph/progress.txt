@@ -198,3 +198,12 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - /v3/api-docs is behind authentication (any valid X-API-Key); swagger-ui is disabled.
   - Validation uses swagger-parser, not Spectral (no Node tooling).
 ---
+## 2026-10-04 - US-024
+- Migration V2 adds `idempotency_key.locked_until`. `claimIdempotency(tenant,key,hash,lease)` now does INSERT ... ON CONFLICT DO UPDATE ... WHERE execution_id IS NULL AND locked_until < now(): an expired orphan is taken over atomically (one winner via row lock); rows with execution_id are never retaken. Lease = `app.idempotency.lease` (ISO-8601, default PT1H), passed to ExecutionService constructor from FlowConfig. The 30s IDEMPOTENCY_WAIT / 409 for live reservations is unchanged.
+- Test: ExecutionHttpTest.expiredOrphanReservationIsTakenOverButLiveOneIsNot (real Postgres). Full suite: 79 tests green.
+- Files: V2__idempotency_lease.sql, JdbcExecutionRepository, ExecutionRepository, ExecutionService, FlowConfig, ExecutionTest, ExecutionHttpTest, ralph/prd.json
+- **Learnings for future iterations:**
+  - There is no global max execution timeout (timeouts are per node, with retries), so the lease default of 1h is a judgement call; keep it above the longest flow you expect.
+  - Existing rows got locked_until = migration time (default now()), so pre-existing orphans become takeable immediately.
+  - A takeover replaces request_hash, so a different payload may take over an expired orphan.
+---

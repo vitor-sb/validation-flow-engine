@@ -41,6 +41,9 @@ class ExecutionHttpTest {
 	@Autowired
 	JsonMapper json;
 
+	@Autowired
+	org.springframework.jdbc.core.JdbcTemplate jdbc;
+
 	private String body(org.springframework.test.web.servlet.ResultActions r) throws Exception {
 		return r.andReturn().getResponse().getContentAsString();
 	}
@@ -164,6 +167,22 @@ class ExecutionHttpTest {
 		startIdem("ka", "k-rel", "idem-late", "{}").andExpect(status().isNotFound());
 		activateFlow("ka", "idem-late");
 		startIdem("ka", "k-rel", "idem-late", "{}").andExpect(status().isCreated());
+	}
+
+	@Test
+	void expiredOrphanReservationIsTakenOverButLiveOneIsNot() throws Exception {
+		activateFlow("ka", "lease");
+		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
+				+ "VALUES ('ta', 'orphan', 'x', now() - interval '1 minute'), "
+				+ "('ta', 'live', 'x', now() + interval '1 hour')");
+		startIdem("ka", "orphan", "lease", "{}").andExpect(status().isCreated())
+				.andExpect(jsonPath("$.status").value("COMPLETED"));
+		org.junit.jupiter.api.Assertions.assertNotNull(jdbc.queryForObject(
+				"SELECT execution_id FROM idempotency_key WHERE tenant_id='ta' AND idempotency_key='orphan'", java.util.UUID.class));
+		// live reservation (hash differs, so it answers 409 at once) stays untouched
+		startIdem("ka", "live", "lease", "{}").andExpect(status().isConflict());
+		org.junit.jupiter.api.Assertions.assertEquals("x", jdbc.queryForObject(
+				"SELECT request_hash FROM idempotency_key WHERE tenant_id='ta' AND idempotency_key='live'", String.class));
 	}
 
 }

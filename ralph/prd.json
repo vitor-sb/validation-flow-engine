@@ -377,7 +377,7 @@
         "Build e testes passam"
       ],
       "priority": 24,
-      "passes": false,
+      "passes": true,
       "notes": "Confirmado: ExecutionService.executeIdempotent + JdbcExecutionRepository.claimIdempotency; hoje não há expiração/lease/limpeza, uma reserva órfã devolve 409 para sempre. Prioridade menor que a US-019 de propósito."
     },
     {

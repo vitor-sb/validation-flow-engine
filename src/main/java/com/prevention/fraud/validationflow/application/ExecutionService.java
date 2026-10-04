@@ -48,6 +48,8 @@ public class ExecutionService {
 
 	private final MeterRegistry meters;
 
+	private final Duration idempotencyLease;
+
 	// only used when a node has config.timeout; daemon threads so a hung validator never blocks shutdown
 	private final ExecutorService timeoutPool = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "validator-timeout");
@@ -56,7 +58,8 @@ public class ExecutionService {
 	});
 
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
-			MeterRegistry meters) {
+			MeterRegistry meters, Duration idempotencyLease) {
+		this.idempotencyLease = idempotencyLease;
 		this.flows = flows;
 		this.repository = repository;
 		this.registry = registry;
@@ -72,7 +75,7 @@ public class ExecutionService {
 		String hash = hash(Arrays.asList(flowKey, userType, context, inputData, correlationId));
 		long deadline = System.nanoTime() + IDEMPOTENCY_WAIT.toNanos();
 		while (true) {
-			if (repository.claimIdempotency(tenantId, key, hash)) {
+			if (repository.claimIdempotency(tenantId, key, hash, idempotencyLease)) {
 				FlowExecution ex;
 				try {
 					ex = execute(tenantId, flowKey, userType, context, inputData, correlationId);

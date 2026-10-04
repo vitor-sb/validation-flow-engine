@@ -164,7 +164,7 @@ class ExecutionTest {
 		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY, HANGING));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
-		executions = new ExecutionService(flows, exRepo, registry, meters);
+		executions = new ExecutionService(flows, exRepo, registry, meters, java.time.Duration.ofHours(1));
 	}
 
 	static UUID activate(String key, String ctx, Map<String, Object> g, List<InputField> contract) {
