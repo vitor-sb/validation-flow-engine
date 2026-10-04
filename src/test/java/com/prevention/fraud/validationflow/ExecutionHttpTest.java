@@ -126,6 +126,18 @@ class ExecutionHttpTest {
 	}
 
 	@Test
+	void invalidIdempotencyKeyIs400AndCreatesNothing() throws Exception {
+		activateFlow("ka", "idemval");
+		String before = body(mvc.perform(get("/api/v1/executions").header("X-API-Key", "ka"))).replaceAll(".*\"total\":(\\d+).*", "$1");
+		for (String bad : new String[] { "k".repeat(256), "bad key!" }) {
+			startIdem("ka", bad, "idemval", "{}").andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+		}
+		mvc.perform(get("/api/v1/executions").header("X-API-Key", "ka")).andExpect(jsonPath("$.total").value(Integer.parseInt(before)));
+		startIdem("ka", "k".repeat(255), "idemval", "{}").andExpect(status().isCreated());
+	}
+
+	@Test
 	void idempotencyKeyReplaysSamePayloadAndRejectsDifferentOne() throws Exception {
 		activateFlow("ka", "idem");
 		String first = id(body(startIdem("ka", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())));

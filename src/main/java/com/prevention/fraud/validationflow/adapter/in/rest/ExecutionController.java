@@ -34,6 +34,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 @RestController
 @RequestMapping("/api/v1/executions")
@@ -68,7 +69,7 @@ class ExecutionController {
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
 	@ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict")
 	ExecutionResponse start(@AuthenticationPrincipal TenantPrincipal principal,
-			@Parameter(description = "Optional idempotency key (max 255 chars)", example = "order-42") @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+			@Parameter(description = "Optional idempotency key (max 255 chars of [A-Za-z0-9._:-])", example = "order-42") @RequestHeader(name = "Idempotency-Key", required = false) @Pattern(regexp = "[A-Za-z0-9._:-]{0,255}", message = "must be at most 255 chars of [A-Za-z0-9._:-]") String idempotencyKey,
 			@Valid @RequestBody StartRequest r) {
 		if (idempotencyKey != null && !idempotencyKey.isBlank()) {
 			return toResponse(service.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),

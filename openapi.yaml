@@ -66,13 +66,14 @@ paths:
         a different payload returns 409.
       operationId: start
       parameters:
-      - description: Optional idempotency key (max 255 chars)
+      - description: "Optional idempotency key (max 255 chars of [A-Za-z0-9._:-])"
         example: order-42
         in: header
         name: Idempotency-Key
         required: false
         schema:
           type: string
+          pattern: "[A-Za-z0-9._:-]{0,255}"
       requestBody:
         content:
           application/json:

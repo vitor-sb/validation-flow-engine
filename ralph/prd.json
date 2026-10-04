@@ -392,7 +392,7 @@
         "Build e testes passam"
       ],
       "priority": 25,
-      "passes": false,
+      "passes": true,
       "notes": "Confirmado: chave com 256 caracteres retornou 500 INTERNAL_ERROR (INSERT em claimIdempotency estoura VARCHAR(255); RestExceptionHandler.unexpected). Viola a regra de erros padronizados."
     },
     {

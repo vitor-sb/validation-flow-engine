@@ -207,3 +207,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Existing rows got locked_until = migration time (default now()), so pre-existing orphans become takeable immediately.
   - A takeover replaces request_hash, so a different payload may take over an expired orphan.
 ---
+## 2026-10-04 - US-025
+- `Idempotency-Key` header validated with `@Pattern("[A-Za-z0-9._:-]{0,255}")` on the controller parameter; invalid -> 400 ErrorResponse code BAD_REQUEST (Spring method validation goes through the generic framework handler, not VALIDATION_ERROR), nothing is created. Empty/absent header still means "no idempotency". openapi.yaml regenerated.
+- Test: ExecutionHttpTest.invalidIdempotencyKeyIs400AndCreatesNothing (256 chars, bad chars -> 400; 255 valid -> 201). Full suite: 80 green.
+- Files: ExecutionController, ExecutionHttpTest, openapi.yaml, ralph/prd.json
+- **Learnings for future iterations:**
+  - `@Pattern/@Min` on request params/headers raise HandlerMethodValidationException -> code BAD_REQUEST (only @Valid bodies give VALIDATION_ERROR).
+  - Executions list is shared across tests in the same container; assert on before/after totals, not absolutes.
+---
