@@ -364,6 +364,65 @@
       "priority": 23,
       "passes": false,
       "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Expiração da reserva de idempotência",
+      "description": "Como cliente da API, quero que uma reserva órfã de `Idempotency-Key` (JVM caiu entre reservar e concluir) expire, para poder repetir a requisição sem ficar bloqueado para sempre.",
+      "acceptanceCriteria": [
+        "`idempotency_key` ganha um tempo de vida (ex.: coluna `locked_until`, via nova migration; sem editar a V1); a reserva é gravada com o prazo",
+        "Reserva sem `execution_id` cujo prazo passou pode ser assumida atomicamente por uma nova requisição com a mesma chave (um único vencedor sob concorrência); com `execution_id` preenchido nunca é reassumida",
+        "Prazo configurável (propriedade) e maior que o timeout máximo de uma execução; requisição que espera uma reserva viva continua recebendo 409 após `IDEMPOTENCY_WAIT`",
+        "Teste de integração com Postgres real: insere uma reserva órfã vencida e verifica que a requisição com a mesma chave executa e conclui; reserva ainda válida não é assumida",
+        "Build e testes passam"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Confirmado: ExecutionService.executeIdempotent + JdbcExecutionRepository.claimIdempotency; hoje não há expiração/lease/limpeza, uma reserva órfã devolve 409 para sempre. Prioridade menor que a US-019 de propósito."
+    },
+    {
+      "id": "US-025",
+      "title": "Validação do header `Idempotency-Key`",
+      "description": "Como cliente da API, quero um 400 claro quando a `Idempotency-Key` for inválida, em vez de um 500.",
+      "acceptanceCriteria": [
+        "Tamanho máximo 255 (coluna `VARCHAR(255)`) e conjunto de caracteres permitido (ex.: `[A-Za-z0-9._:-]`) validados na entrada do controller",
+        "Chave inválida retorna 400 com `ErrorResponse` (código `VALIDATION_ERROR` ou equivalente) e nenhuma execução é criada",
+        "Teste HTTP: chave com 256 caracteres e chave com caracteres inválidos retornam 400; chave de 255 caracteres válidos continua funcionando",
+        "`openapi.yaml` regenerado se o contrato mudar (teste de contrato da US-019)",
+        "Build e testes passam"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Confirmado: chave com 256 caracteres retornou 500 INTERNAL_ERROR (INSERT em claimIdempotency estoura VARCHAR(255); RestExceptionHandler.unexpected). Viola a regra de erros padronizados."
+    },
+    {
+      "id": "US-026",
+      "title": "Sinalização de replay idempotente",
+      "description": "Como cliente da API, quero saber quando a resposta é um replay de uma chamada anterior, para distinguir de uma execução nova.",
+      "acceptanceCriteria": [
+        "Resposta de repetição (mesma `Idempotency-Key` e mesmo payload, devolvendo execução já concluída) inclui o header `Idempotent-Replayed: true`",
+        "A primeira chamada e chamadas sem `Idempotency-Key` NÃO têm o header; o corpo continua sendo o mesmo formato",
+        "Teste HTTP cobrindo primeira chamada (sem header) e repetição (com header); `openapi.yaml` documenta o header",
+        "Build e testes passam"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "Confirmado: hoje o replay não tem header nem campo que o identifique (ExecutionController.start). Observação: o corpo do replay é semanticamente igual mas não byte a byte (completedAt perde nanossegundos, ordem das chaves de result muda pelo JSONB)."
+    },
+    {
+      "id": "US-027",
+      "title": "Máscara completa de credenciais na persistência",
+      "description": "Como time de segurança, quero que credenciais enviadas no input não fiquem em texto puro em nenhuma tabela nem log.",
+      "acceptanceCriteria": [
+        "`flow_execution.input_data` é gravado com `LogMasker.maskSecrets` (JdbcExecutionRepository.insert / ExecutionService.run); o motor continua usando o input original em memória",
+        "`observed` de `TRANSITION_EVALUATED` em `execution_audit_log` não grava o valor quando o campo da condição é de credencial (ex.: `inputData.token`); mascarar também `observed` de AND/OR/NOT",
+        "Mensagens livres de validators/exceções (`ValidatorException`/`RuntimeException` -> `node_execution.error_info`, `flow_execution.error_info`, logs) não gravam valores de credenciais do input (ex.: substituir o valor literal das credenciais conhecidas do input por `***`); `flow_execution.error_info` também passa pela máscara",
+        "Teste de integração com Postgres real: envia `token` no input com condição sobre `inputData.token`, validator que falha com o token na mensagem; depois verifica que o valor não aparece em NENHUMA tabela (varre todas as tabelas via `::text`) nem na saída de log capturada",
+        "Build e testes passam"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "Confirmado em execução real: input_data = {\"token\": \"SECRET-TOKEN-123\"} e audit observed = \"SECRET-TOKEN-123\" em texto puro. Também sem máscara: flow_execution.error_info (ExecutionService.save) e mensagens de erro persistidas/logadas só mascaradas por nome de chave."
     }
   ]
 }
