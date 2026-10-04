@@ -144,3 +144,9 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Masking is key-name based only. NOT covered: secrets inside free-text error messages, the TRANSITION_EVALUATED audit `observed` value, and flow_execution.input_data (raw request). Note in story notes.
   - Masked values replace data, so the returned `result` of POST /executions also shows `***` for credential-named keys.
 ---
+## 2026-10-03 - US-023
+- `ValidatorStrategy` Javadoc now states the idempotency contract (may be re-run after timeout/retry) and that timeouts cancel with `Future.cancel(true)`. The cancel was already in `ExecutionService.call`; added ExecutionTest.timedOutValidatorIsInterruptedBeforeRetry (HANGING validator tracks concurrent runs: max 1, both attempts interrupted, none left running).
+- Files: ValidatorStrategy, ExecutionTest, ralph/prd.json
+- **Learnings for future iterations:**
+  - Interrupt delivery is asynchronous, so the test uses a 0.2s retry delay and polls `running` before asserting. A validator that ignores interruption still keeps running; the contract only asks implementations to honour it.
+---

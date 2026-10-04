@@ -95,6 +95,33 @@ class ExecutionTest {
 		}
 	};
 
+	static final java.util.concurrent.atomic.AtomicInteger running = new java.util.concurrent.atomic.AtomicInteger();
+
+	static final java.util.concurrent.atomic.AtomicInteger maxRunning = new java.util.concurrent.atomic.AtomicInteger();
+
+	static final java.util.concurrent.atomic.AtomicInteger interrupted = new java.util.concurrent.atomic.AtomicInteger();
+
+	/** Blocks until interrupted, tracking how many instances run at once. */
+	static final ValidatorStrategy HANGING = new ValidatorStrategy() {
+		public String key() {
+			return "hanging";
+		}
+
+		public ValidationResult execute(ValidationInput in) {
+			maxRunning.accumulateAndGet(running.incrementAndGet(), Math::max);
+			try {
+				Thread.sleep(5000);
+			}
+			catch (InterruptedException e) {
+				interrupted.incrementAndGet();
+			}
+			finally {
+				running.decrementAndGet();
+			}
+			return new ValidationResult(true, Map.of());
+		}
+	};
+
 	/** Returns a credential and a CPF in its output, and fails (retryable=false) with one in the message map. */
 	static final ValidatorStrategy LEAKY = new ValidatorStrategy() {
 		public String key() {
@@ -134,7 +161,7 @@ class ExecutionTest {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		jdbc = new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()));
 		var json = JsonMapper.builder().build();
-		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY));
+		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY, HANGING));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
 		executions = new ExecutionService(flows, exRepo, registry, meters);
@@ -252,6 +279,22 @@ class ExecutionTest {
 		assertEquals(List.of("TIMED_OUT", "TIMED_OUT"), jdbc.queryForList(
 				"SELECT status FROM node_execution WHERE execution_id = ? AND node_id = 'v' ORDER BY attempt", String.class, f.id()));
 		assertEquals(2.0, meters.counter("validation.node.timeout", "validator", "slow").count());
+	}
+
+	@Test
+	void timedOutValidatorIsInterruptedBeforeRetry() throws Exception {
+		activate("k8", "C8", singleNodeGraph("hanging", Map.of("timeout", "PT0.05S",
+				"retryPolicy", Map.of("maxAttempts", 2, "backoff", "FIXED", "delay", "PT0.2S"))), List.of());
+		running.set(0);
+		maxRunning.set(0);
+		interrupted.set(0);
+		executions.execute("t", null, "PF", "C8", Map.of(), null);
+		assertEquals(1, maxRunning.get(), "attempts must never overlap");
+		for (int i = 0; i < 50 && running.get() > 0; i++) {
+			Thread.sleep(20);
+		}
+		assertEquals(0, running.get());
+		assertEquals(2, interrupted.get());
 	}
 
 	@Test
