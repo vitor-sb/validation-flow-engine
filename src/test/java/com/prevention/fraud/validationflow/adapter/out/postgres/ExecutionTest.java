@@ -340,4 +340,82 @@ class ExecutionTest {
 		assertFalse(exec.contains("in-secret") || exec.contains("out-secret"), exec);
 	}
 
+	static Map<String, Object> subGraph(String childKey, Map<String, Object> extra) {
+		Map<String, Object> cfg = new java.util.HashMap<>(extra);
+		cfg.put("flowKey", childKey);
+		return Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "sub"))),
+				"sub", Map.of("type", "SUB_FLOW", "config", cfg, "transitions", List.of(Map.of("to", "e"))),
+				"e", Map.of("type", "END", "config", Map.of())));
+	}
+
+	static String activationError(String key, Map<String, Object> g) {
+		var d = flows.createDraft("t", "t", new FlowService.CreateFlow(key, "PF", "CTX-" + key, "d", null, g, List.of(), null));
+		var e = assertThrows(FlowException.class, () -> flows.activate("t", d.id()));
+		return e.errors().get(0).code();
+	}
+
+	@Test
+	void subFlowRunsChildWithMappedInputAndReturnsOnlyMappedOutput() {
+		activate("sf-child", "SFC", graph(true, "c"), List.of(new InputField("ok", "boolean", true)));
+		activate("sf-parent", "SFP", subGraph("sf-child", Map.of("inputMapping", Map.of("ok", "$.inputData.flag"),
+				"outputMapping", Map.of("seen", "$.nodes.v.seen"))), List.of());
+		FlowExecution p = executions.execute("t", "sf-parent", null, null, Map.of("flag", true, "other", "x"), "corr-sf");
+		assertEquals(ExecutionStatus.COMPLETED, p.status());
+		var out = (Map<?, ?>) ((Map<?, ?>) p.contextData().get("nodes")).get("sub");
+		assertEquals(true, out.get("seen"));
+		assertFalse(out.containsKey("success") && out.containsKey("v"));
+		var child = jdbc.queryForMap("SELECT parent_execution_id, parent_node_id, input_data::text AS i, correlation_id "
+				+ "FROM flow_execution WHERE flow_key = 'sf-child' AND parent_execution_id = ?", p.id());
+		assertEquals("sub", child.get("parent_node_id"));
+		assertEquals("{\"ok\": true}", child.get("i"));
+		assertEquals("corr-sf", child.get("correlation_id"));
+		assertEquals(p.id(), executions.get("t", p.id()).id());
+		// the parent context never saw the child's nodes
+		assertFalse(((Map<?, ?>) p.contextData().get("nodes")).containsKey("v"));
+	}
+
+	@Test
+	void failedChildFailsTheParentAndTenantsDoNotShareChildren() {
+		activate("sf-child2", "SFC2", graph(false, "c"), List.of());
+		activate("sf-parent2", "SFP2", subGraph("sf-child2", Map.of("inputMapping", Map.of("ok", "$.inputData.flag"))), List.of());
+		FlowExecution p = executions.execute("t", "sf-parent2", null, null, Map.of("flag", false), null);
+		assertEquals(ExecutionStatus.FAILED, p.status());
+		assertEquals("SUB_FLOW_FAILED", p.errorInfo().get("code"));
+		var d = flows.createDraft("other", "o", new FlowService.CreateFlow("sf-parent3", "PF", "SFP3", "d", null,
+				subGraph("sf-child2", Map.of()), List.of(), null));
+		flows.activate("other", d.id());
+		FlowExecution o = executions.execute("other", "sf-parent3", null, null, Map.of(), null);
+		assertEquals("SUB_FLOW_NOT_FOUND", o.errorInfo().get("code"));
+	}
+
+	@Test
+	void compositionCyclesAreRejectedAtActivation() {
+		assertEquals("SUB_FLOW_CYCLE_DETECTED", activationError("cy-self", subGraph("cy-self", Map.of())));
+		activate("cy-a", "CYA", subGraph("cy-b", Map.of()), List.of()); // cy-b not active yet: allowed
+		activate("cy-b", "CYB", subGraph("cy-c", Map.of()), List.of());
+		assertEquals("SUB_FLOW_CYCLE_DETECTED", activationError("cy-c", subGraph("cy-a", Map.of())));
+	}
+
+	@Test
+	void depthIsEnforcedAtActivation() {
+		activate("d-c", "DC", singleNodeGraph("fake", Map.of()), List.of());
+		activate("d-b", "DB", subGraph("d-c", Map.of("maxDepth", 1)), List.of());
+		// d-c would run at depth 2 but d-b allows 1
+		assertEquals("SUB_FLOW_DEPTH_EXCEEDED", activationError("d-a", subGraph("d-b", Map.of())));
+	}
+
+	@Test
+	void depthIsEnforcedAtRuntime() {
+		// activated root-first so each activation sees no deeper chain; the chain only exists at runtime
+		activate("r-a", "RA", subGraph("r-b", Map.of()), List.of());
+		activate("r-c", "RC", singleNodeGraph("fake", Map.of()), List.of());
+		activate("r-b", "RB", subGraph("r-c", Map.of("maxDepth", 1)), List.of());
+		FlowExecution a = executions.execute("t", "r-a", null, null, Map.of(), null);
+		assertEquals(ExecutionStatus.FAILED, a.status());
+		assertEquals("SUB_FLOW_FAILED", a.errorInfo().get("code"));
+		var childError = (Map<?, ?>) ((Map<?, ?>) a.errorInfo().get("details")).get("childError");
+		assertEquals("SUB_FLOW_DEPTH_EXCEEDED", childError.get("code"));
+	}
+
 }

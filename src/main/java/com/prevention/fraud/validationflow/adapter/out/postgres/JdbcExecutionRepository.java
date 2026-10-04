@@ -35,11 +35,13 @@ class JdbcExecutionRepository implements ExecutionRepository {
 	public void insert(FlowExecution e) {
 		jdbc.update("""
 				INSERT INTO flow_execution (id, tenant_id, flow_definition_id, flow_key, flow_version, flow_snapshot,
-				    correlation_id, status, input_data, context_data, lock_version, started_at)
-				VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb, ?::jsonb, ?, ?)""", e.id(), e.tenantId(),
+				    correlation_id, status, input_data, context_data, lock_version, started_at, parent_execution_id,
+				    parent_node_id)
+				VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, ?)""", e.id(), e.tenantId(),
 				e.flowDefinitionId(), e.flowKey(), e.flowVersion(), json.writeValueAsString(e.snapshot()),
 				e.correlationId(), e.status().name(), json.writeValueAsString(e.inputData()),
-				json.writeValueAsString(e.contextData()), e.lockVersion(), Timestamp.from(e.startedAt()));
+				json.writeValueAsString(e.contextData()), e.lockVersion(), Timestamp.from(e.startedAt()), e.parentExecutionId(),
+				e.parentNodeId());
 	}
 
 	@Override
@@ -68,7 +70,8 @@ class JdbcExecutionRepository implements ExecutionRepository {
 				ExecutionStatus.valueOf(rs.getString("status")), map(rs.getString("input_data")),
 				map(rs.getString("context_data")), map(rs.getString("result")), map(rs.getString("error_info")),
 				rs.getLong("lock_version"), rs.getTimestamp("started_at").toInstant(),
-				done == null ? null : done.toInstant());
+				done == null ? null : done.toInstant(), rs.getObject("parent_execution_id", UUID.class),
+				rs.getString("parent_node_id"));
 	}
 
 	@Override

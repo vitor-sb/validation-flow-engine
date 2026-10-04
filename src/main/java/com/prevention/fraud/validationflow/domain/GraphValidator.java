@@ -117,6 +117,9 @@ public class GraphValidator {
 					errors.add(err("INVALID_MAPPING", id, m + " must map names to JSONPath ('$...') strings"));
 				}
 			}
+			if (config.containsKey("onFailure") && !"FAIL_PARENT".equals(config.get("onFailure"))) {
+				errors.add(err("INVALID_SUB_FLOW", id, "onFailure must be FAIL_PARENT"));
+			}
 			Object depth = config.get("maxDepth");
 			if (depth != null && (!(depth instanceof Integer d) || d < 1 || d > MAX_SUB_FLOW_DEPTH)) {
 				errors.add(err("SUB_FLOW_DEPTH_EXCEEDED", id, "maxDepth must be 1.." + MAX_SUB_FLOW_DEPTH));

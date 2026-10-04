@@ -22,7 +22,9 @@ import java.util.concurrent.TimeoutException;
 
 import com.prevention.fraud.validationflow.domain.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
+import com.prevention.fraud.validationflow.domain.GraphValidator;
 import com.prevention.fraud.validationflow.domain.NodeExecution;
 
 import org.slf4j.Logger;
@@ -134,24 +136,36 @@ public class ExecutionService {
 	public FlowExecution execute(String tenantId, String flowKey, String userType, String context,
 			Map<String, Object> inputData, String correlationId) {
 		FlowDefinition flow = flows.resolveActive(tenantId, flowKey, userType, context);
+		return run(tenantId, flow, correlationId, inputData, null, null, List.of(), new HashMap<>());
+	}
+
+	/**
+	 * Runs one flow; {@code chain} holds the flowKeys of the ancestors (empty for a root run) and {@code ctx} is filled
+	 * with the execution context so a parent can read the child's unmasked outputs.
+	 */
+	private FlowExecution run(String tenantId, FlowDefinition flow, String correlationId,
+			Map<String, Object> inputData, UUID parentId, String parentNodeId, List<String> chain,
+			Map<String, Object> ctx) {
 		List<String> missing = flow.inputContract().stream()
 				.filter(f -> f.required() && inputData.get(f.name()) == null).map(f -> f.name()).toList();
 		if (!missing.isEmpty()) {
 			throw FlowException.invalidInput("missing required input field(s): " + String.join(", ", missing));
 		}
-		FlowExecution ex = FlowExecution.pending(tenantId, flow, correlationId, inputData);
+		FlowExecution ex = FlowExecution.pending(tenantId, flow, correlationId, inputData, parentId, parentNodeId);
 		repository.insert(ex);
 		ex = save(ex.start());
+		var outerMdc = MDC.getCopyOfContextMap();
 		MDC.put("correlationId", String.valueOf(correlationId));
 		MDC.put("executionId", ex.id().toString());
 		MDC.put("flowKey", ex.flowKey());
 		MDC.put("flowVersion", String.valueOf(ex.flowVersion()));
 		// fresh map per execution: nothing is shared between runs
-		Map<String, Object> ctx = new HashMap<>();
 		ctx.put("inputData", inputData);
 		ctx.put("nodes", new LinkedHashMap<String, Object>());
 		try {
-			FlowExecution done = walk(ex, ctx);
+			List<String> path = new ArrayList<>(chain);
+			path.add(ex.flowKey());
+			FlowExecution done = walk(ex, ctx, path);
 			MDC.put("status", done.status().name());
 			log.info("execution finished");
 			return done;
@@ -160,12 +174,17 @@ public class ExecutionService {
 			return save(ex.fail(ctx, "EXECUTION_ERROR", String.valueOf(e.getMessage())));
 		}
 		finally {
-			MDC.clear();
+			if (outerMdc == null) {
+				MDC.clear();
+			}
+			else {
+				MDC.setContextMap(outerMdc);
+			}
 		}
 	}
 
 	@SuppressWarnings("unchecked")
-	private FlowExecution walk(FlowExecution ex, Map<String, Object> ctx) {
+	private FlowExecution walk(FlowExecution ex, Map<String, Object> ctx, List<String> chain) {
 		Map<String, Map<String, Object>> nodes = (Map<String, Map<String, Object>>) ex.snapshot().get("nodes");
 		String id = (String) ex.snapshot().get("startNodeId");
 		while (true) {
@@ -187,6 +206,12 @@ public class ExecutionService {
 					Map<String, Object> out = new LinkedHashMap<>(a.result().output() == null ? Map.of() : a.result().output());
 					out.put("success", a.result().success());
 					((Map<String, Object>) ctx.get("nodes")).put(id, out);
+				}
+				case "SUB_FLOW" -> {
+					FlowExecution failed = subFlow(ex, id, config, ctx, chain);
+					if (failed != null) {
+						return failed;
+					}
 				}
 				case "END" -> {
 					recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
@@ -217,6 +242,81 @@ public class ExecutionService {
 			}
 			id = next;
 		}
+	}
+
+	/**
+	 * Runs the child flow (active version now) with only the mapped input and copies back only the mapped output into
+	 * {@code ctx.nodes[nodeId]}. Returns the failed parent, or null to keep walking. Depth: the child runs at level
+	 * {@code chain.size()} (root = 0) and may not exceed the node's maxDepth (default {@link GraphValidator#MAX_SUB_FLOW_DEPTH}).
+	 */
+	@SuppressWarnings("unchecked")
+	private FlowExecution subFlow(FlowExecution ex, String nodeId, Map<String, Object> config,
+			Map<String, Object> ctx, List<String> chain) {
+		Instant started = Instant.now();
+		String childKey = (String) config.get("flowKey");
+		int limit = config.get("maxDepth") instanceof Integer d ? d : GraphValidator.MAX_SUB_FLOW_DEPTH;
+		String code;
+		String message;
+		Map<String, Object> details = new LinkedHashMap<>(Map.of("nodeId", nodeId));
+		if (chain.contains(childKey)) {
+			code = "SUB_FLOW_CYCLE_DETECTED";
+			message = "sub-flow " + childKey + " is already running in this chain " + chain;
+		}
+		else if (chain.size() > limit) {
+			code = "SUB_FLOW_DEPTH_EXCEEDED";
+			message = "sub-flow " + childKey + " would run at depth " + chain.size() + ", maxDepth is " + limit;
+		}
+		else {
+			code = null;
+			message = null;
+		}
+		Map<String, Object> childCtx = new HashMap<>();
+		FlowExecution child = null;
+		if (code == null) {
+			Map<String, Object> input = new LinkedHashMap<>();
+			((Map<String, String>) config.getOrDefault("inputMapping", Map.of())).forEach((name, path) -> {
+				Object v = ConditionEvaluator.lookup(ctx, jsonPath(path));
+				if (v != null) {
+					input.put(name, v);
+				}
+			});
+			try {
+				FlowDefinition flow = flows.resolveActive(ex.tenantId(), childKey, null, null);
+				child = run(ex.tenantId(), flow, ex.correlationId(), input, ex.id(), nodeId, chain, childCtx);
+			}
+			catch (FlowException e) {
+				code = e.kind() == FlowException.Kind.INVALID_INPUT ? "SUB_FLOW_INVALID_INPUT" : "SUB_FLOW_NOT_FOUND";
+				message = String.valueOf(e.getMessage());
+			}
+			if (child != null && child.status() != ExecutionStatus.COMPLETED) {
+				code = "SUB_FLOW_FAILED"; // onFailure is always FAIL_PARENT
+				message = "sub-flow " + childKey + " ended " + child.status();
+				details.put("childExecutionId", child.id().toString());
+				details.put("childError", child.errorInfo() == null ? Map.of() : child.errorInfo());
+			}
+		}
+		if (code != null) {
+			Map<String, Object> error = error(code, message, false);
+			recordNode(ex, nodeId, "SUB_FLOW", 1, "FAILED", Map.of(), error, ctx, started);
+			return save(ex.fail(ctx, code, message, false, details));
+		}
+		Map<String, Object> out = new LinkedHashMap<>();
+		((Map<String, String>) config.getOrDefault("outputMapping", Map.of())).forEach((name, path) -> {
+			Object v = ConditionEvaluator.lookup(childCtx, jsonPath(path));
+			if (v != null) {
+				out.put(name, v);
+			}
+		});
+		out.put("success", true);
+		out.put("childExecutionId", child.id().toString());
+		((Map<String, Object>) ctx.get("nodes")).put(nodeId, out);
+		recordNode(ex, nodeId, "SUB_FLOW", 1, "COMPLETED", out, null, ctx, started);
+		return null;
+	}
+
+	/** Only plain dotted JSONPath ({@code $.a.b}) is supported; {@code $} alone is the whole context. */
+	private static String jsonPath(String path) {
+		return path.startsWith("$.") ? path.substring(2) : path.substring(1);
 	}
 
 	record Attempt(ValidatorStrategy.ValidationResult result, Map<String, Object> error, int attempts) {
@@ -340,13 +440,15 @@ public class ExecutionService {
 	private FlowExecution save(FlowExecution ex) {
 		ex = new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
 				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), secrets(ex.contextData()),
-				secrets(ex.result()), ex.errorInfo(), ex.lockVersion(), ex.startedAt(), ex.completedAt());
+				secrets(ex.result()), ex.errorInfo(), ex.lockVersion(), ex.startedAt(), ex.completedAt(),
+				ex.parentExecutionId(), ex.parentNodeId());
 		if (!repository.update(ex)) {
 			throw new IllegalStateException("execution " + ex.id() + " was modified concurrently");
 		}
 		return new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
 				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), ex.contextData(), ex.result(),
-				ex.errorInfo(), ex.lockVersion() + 1, ex.startedAt(), ex.completedAt());
+				ex.errorInfo(), ex.lockVersion() + 1, ex.startedAt(), ex.completedAt(), ex.parentExecutionId(),
+				ex.parentNodeId());
 	}
 
 }

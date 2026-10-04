@@ -159,3 +159,13 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Replays return 201 with the original body (no distinct status/header).
   - Idempotency-Key is not validated for length (column is VARCHAR(255)); a longer key gives a 500.
 ---
+## 2026-10-03 - US-015
+- SUB_FLOW executes end to end: child runs as its own flow_execution (parent_execution_id/parent_node_id, same correlationId, ACTIVE version at call time) with only `inputMapping` values as input; parent ctx gets only `outputMapping` values (+ success, childExecutionId) at `nodes.<nodeId>`. Child failure -> parent FAILED `SUB_FLOW_FAILED` (details.childError); child not found/invalid input -> `SUB_FLOW_NOT_FOUND`/`SUB_FLOW_INVALID_INPUT`.
+- Depth/cycle: runtime in ExecutionService.subFlow (chain of flowKeys; codes SUB_FLOW_CYCLE_DETECTED / SUB_FLOW_DEPTH_EXCEEDED); at activation in FlowService.subFlowProblems (422 INVALID_FLOW), following ACTIVE versions of children. maxDepth = max level (root=0) the child may run at, default 3. GraphValidator also rejects onFailure != FAIL_PARENT.
+- Files: domain/{FlowExecution(+parent fields),GraphValidator,ConditionEvaluator.lookup public}, application/{ExecutionService,FlowService}, JdbcExecutionRepository, ExecutionTest (5 new), GraphValidatorTest
+- **Learnings for future iterations:**
+  - FlowExecution record now ends with parentExecutionId, parentNodeId; ExecutionService.run(...) is the shared entry for root and child runs (MDC is restored, not cleared, after a child).
+  - Mapping paths are plain dotted ("$.inputData.x", "$.nodes.v.out"), resolved with ConditionEvaluator.lookup; no JSONPath library (no filters/arrays).
+  - A child with no ACTIVE version is not an activation error (only runtime); a runtime cycle can't be built via the API because the last activation in the loop is rejected, so only activation cycles are tested.
+  - No new endpoint, so no HTTP test; sub-flow tests are service-level in ExecutionTest (tenant isolation: other tenant's child -> SUB_FLOW_NOT_FOUND).
+---

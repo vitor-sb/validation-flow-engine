@@ -9,13 +9,18 @@ import java.util.UUID;
 public record FlowExecution(UUID id, String tenantId, UUID flowDefinitionId, String flowKey, int flowVersion,
 		Map<String, Object> snapshot, String correlationId, ExecutionStatus status, Map<String, Object> inputData,
 		Map<String, Object> contextData, Map<String, Object> result, Map<String, Object> errorInfo,
-		long lockVersion, Instant startedAt, Instant completedAt) {
+		long lockVersion, Instant startedAt, Instant completedAt, UUID parentExecutionId, String parentNodeId) {
 
 	public static FlowExecution pending(String tenantId, FlowDefinition flow, String correlationId,
 			Map<String, Object> inputData) {
+		return pending(tenantId, flow, correlationId, inputData, null, null);
+	}
+
+	public static FlowExecution pending(String tenantId, FlowDefinition flow, String correlationId,
+			Map<String, Object> inputData, UUID parentExecutionId, String parentNodeId) {
 		return new FlowExecution(UUID.randomUUID(), tenantId, flow.id(), flow.flowKey(), flow.version(),
 				flow.graphDefinition(), correlationId, ExecutionStatus.PENDING, inputData, Map.of(), null, null, 0,
-				Instant.now(), null);
+				Instant.now(), null, parentExecutionId, parentNodeId);
 	}
 
 	public FlowExecution start() {
@@ -44,7 +49,8 @@ public record FlowExecution(UUID id, String tenantId, UUID flowDefinitionId, Str
 		}
 		boolean terminal = next != ExecutionStatus.RUNNING;
 		return new FlowExecution(id, tenantId, flowDefinitionId, flowKey, flowVersion, snapshot, correlationId, next,
-				inputData, context, result, error, lockVersion, startedAt, terminal ? Instant.now() : null);
+				inputData, context, result, error, lockVersion, startedAt, terminal ? Instant.now() : null,
+				parentExecutionId, parentNodeId);
 	}
 
 }

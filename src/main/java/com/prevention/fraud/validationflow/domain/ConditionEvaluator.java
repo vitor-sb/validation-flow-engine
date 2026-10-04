@@ -114,7 +114,8 @@ public final class ConditionEvaluator {
 		return new BigDecimal(n.toString());
 	}
 
-	private static Object lookup(Map<String, Object> data, String path) {
+	/** Dotted-path lookup ({@code a.b.c}); null when any step is missing. */
+	public static Object lookup(Map<String, Object> data, String path) {
 		Object cur = data;
 		for (String part : path.split("\\.")) {
 			if (!(cur instanceof Map<?, ?> m)) {

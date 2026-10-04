@@ -303,8 +303,8 @@
         "Limite `maxDepth` é imposto em runtime: cadeia mais profunda que o limite falha a execução com erro explícito (ex.: `SUB_FLOW_DEPTH_EXCEEDED`), com teste"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": "Depende de validadores reais para fluxos úteis, mas testes usam validator fake. Não afrouxar validação para contornar."
+      "passes": true,
+      "notes": "Depende de validadores reais para fluxos úteis, mas testes usam validator fake. Não afrouxar validação para contornar. Implementado: maxDepth = nível máximo (raiz=0) em que o filho pode rodar (default 3); JSONPath só suporta caminhos pontilhados ($.a.b); onFailure só FAIL_PARENT; filho sem versão ACTIVE só falha em runtime (SUB_FLOW_NOT_FOUND); ciclo em runtime não tem teste (a ativação o bloqueia antes)."
     },
     {
       "id": "US-016",

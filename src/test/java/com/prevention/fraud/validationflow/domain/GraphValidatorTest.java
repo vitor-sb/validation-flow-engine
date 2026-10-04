@@ -126,6 +126,7 @@ class GraphValidatorTest {
 	@Test
 	void subFlowDepthAboveLimit() {
 		expect("SUB_FLOW_DEPTH_EXCEEDED", g -> addSubFlow(g, Map.of("flowKey", "child", "maxDepth", 99)));
+		expect("INVALID_SUB_FLOW", g -> addSubFlow(g, Map.of("flowKey", "child", "onFailure", "IGNORE")));
 		assertEquals(List.of(), validator.validate(withSubFlow(Map.of("flowKey", "child", "maxDepth", 2))));
 	}
 
