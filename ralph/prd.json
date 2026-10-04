@@ -427,6 +427,81 @@
       "priority": 27,
       "passes": true,
       "notes": "Confirmado em execução real: input_data = {\"token\": \"SECRET-TOKEN-123\"} e audit observed = \"SECRET-TOKEN-123\" em texto puro. Também sem máscara: flow_execution.error_info (ExecutionService.save) e mensagens de erro persistidas/logadas só mascaradas por nome de chave. Confirmado: RestExceptionHandler.unexpected (linha 62-64) já devolve só 'unexpected error' na resposta; só o log leva a exceção."
+    },
+    {
+      "id": "US-028",
+      "title": "Recuperação de execuções presas em RUNNING",
+      "description": "Como operador, quero que execuções abandonadas por uma queda da JVM sejam finalizadas automaticamente, para que não fiquem em RUNNING para sempre.",
+      "acceptanceCriteria": [
+        "Job agendado marca como FAILED (error_info com código `EXECUTION_ABANDONED`, `completed_at` preenchido) toda `flow_execution` em RUNNING com `started_at` mais antigo que `app.recovery.stale-after` (Duration configurável; sem valor padrão embutido: job desligado se a propriedade não estiver definida)",
+        "A atualização usa a trava otimista (`lock_version`) para não sobrescrever uma execução que terminou no meio do caminho; grava linha em `execution_audit_log`",
+        "Reivindicações de idempotência órfãs (`execution_id IS NULL` e `locked_until` vencido) são removidas pelo mesmo job",
+        "Teste de integração com Postgres real: execução RUNNING antiga vira FAILED, uma recente permanece RUNNING, uma de outro tenant também é tratada (job é global) sem vazar dados entre tenants",
+        "Teste: GET da execução recuperada devolve status FAILED",
+        "Build e testes passam"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "Auditoria de segurança. src/main/java/com/prevention/fraud/validationflow/application/ExecutionService.java:94 grava `execution_id` na chave de idempotência só DEPOIS de `execute()` terminar (linha 88); se a JVM cair no meio, a linha flow_execution fica RUNNING para sempre (nenhum job a recupera) e a chave fica sem execution_id: retries recebem 409 por até `app.idempotency.lease` (1h) e depois reexecutam o fluxo (execução duplicada). Valor de `stale-after` é decisão do dono do produto: deve ser maior que a execução mais longa possível."
+    },
+    {
+      "id": "US-029",
+      "title": "Executor de timeout de validators limitado",
+      "description": "Como time de segurança, quero que validators que ignoram interrupção não possam esgotar threads da JVM.",
+      "acceptanceCriteria": [
+        "`timeoutPool` deixa de ser `Executors.newCachedThreadPool()` e passa a ser um `ThreadPoolExecutor` com máximo de threads configurável (`app.validators.max-threads`) e fila limitada, mantendo threads daemon",
+        "Quando o pool está saturado a execução do nó falha com erro retryable `NODE_REJECTED` (sem bloquear a thread HTTP indefinidamente e sem lançar exceção não tratada); métrica `validation.node.rejected` incrementada",
+        "Teste: validator que ignora `Thread.interrupt()` com timeout curto, chamado mais vezes que o limite; o número de threads `validator-timeout` nunca passa do máximo e as chamadas excedentes recebem NODE_REJECTED",
+        "Comportamento de timeout existente (NODE_TIMEOUT) continua coberto pelos testes atuais",
+        "Build e testes passam"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Auditoria de segurança. src/main/java/com/prevention/fraud/validationflow/application/ExecutionService.java:57 (cached pool ilimitado) e :403-406 (`f.cancel(true)` não encerra validator que ignora interrupção, a thread continua ocupada). O tamanho máximo do pool e da fila é decisão de capacidade: tornar configurável e documentar."
+    },
+    {
+      "id": "US-030",
+      "title": "Limites de tamanho de entrada: corpo da requisição e grafo",
+      "description": "Como time de segurança, quero limites de tamanho para o corpo das requisições e para o grafo de fluxo, para evitar esgotamento de memória/CPU por payloads enormes.",
+      "acceptanceCriteria": [
+        "Filtro (ou configuração do container) rejeita corpos acima de `app.limits.max-body-bytes` com 413 e `ErrorResponse`, inclusive com `Transfer-Encoding: chunked` (sem depender só de Content-Length)",
+        "`GraphValidator` rejeita grafos com mais de `app.limits.max-nodes` nós ou `app.limits.max-transitions` transições totais (códigos `GRAPH_TOO_LARGE`); aplicado em /flows/validate, criação, atualização e ativação",
+        "Tamanho máximo do header `Idempotency-Key` já existe (255); cobrir também tamanho de `correlationId` (já limitado a 128 no banco, devolver 400 em vez de 500)",
+        "Testes: corpo acima do limite (content-length e chunked) -> 413; grafo acima do limite -> valid=false / 422; abaixo do limite continua passando",
+        "Build e testes passam"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Auditoria de segurança. Nenhum limite de corpo configurado em src/main/resources/application.yaml (Tomcat não limita corpo JSON); src/main/java/com/prevention/fraud/validationflow/domain/GraphValidator.java:validate não limita nós/transições. Profundidade de condições fica limitada pelo Jackson (nesting 500), sem risco de StackOverflow confirmado. Valores padrão dos limites são decisão do dono: confirmar antes de fixar (sugestão inicial: 1 MB, 200 nós, 1000 transições)."
+    },
+    {
+      "id": "US-031",
+      "title": "Limites de retryPolicy e timeout em nós de validação",
+      "description": "Como time de segurança, quero limites para retries, atraso e timeout configurados num fluxo, para que um fluxo não prenda uma thread HTTP por tempo arbitrário.",
+      "acceptanceCriteria": [
+        "`GraphValidator` rejeita `retryPolicy.maxAttempts` acima de `app.limits.max-attempts`, `retryPolicy.delay` inválido ou acima de `app.limits.max-delay`, e `timeout` acima de `app.limits.max-timeout` (códigos INVALID_RETRY_POLICY / INVALID_TIMEOUT)",
+        "`delay` malformado hoje só falha em tempo de execução (`Duration.parse` sem tratamento): passa a ser rejeitado na validação do grafo",
+        "Backoff exponencial não estoura `long` (limitar o expoente ou o atraso resultante)",
+        "Testes: maxAttempts=2_000_000_000, delay `PT24H`, delay `abc`, backoff exponencial com 70 tentativas -> todos rejeitados/limitados; valores dentro do limite continuam funcionando",
+        "Build e testes passam"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "Auditoria de segurança. src/main/java/com/prevention/fraud/validationflow/application/ExecutionService.java:355-358 e :389 (`1L << (attempt - 1)` estoura com attempt > 63; Duration.parse sem validação); src/main/java/com/prevention/fraud/validationflow/domain/GraphValidator.java:111 só exige maxAttempts >= 1. Limites numéricos: decisão do dono (confirmar valores)."
+    },
+    {
+      "id": "US-032",
+      "title": "Retenção das chaves de idempotência",
+      "description": "Como operador, quero que a tabela idempotency_key não cresça sem limite.",
+      "acceptanceCriteria": [
+        "Job agendado apaga chaves de idempotência com `created_at` mais antigo que `app.retention.idempotency` (Duration configurável; job desligado se não definido, sem valor embutido)",
+        "Nunca apaga chave cuja reserva ainda está ativa (`execution_id IS NULL` e `locked_until` no futuro)",
+        "Teste de integração com Postgres real: chave antiga concluída é apagada; chave recente e reserva ativa permanecem; um replay depois da retenção executa o fluxo de novo (comportamento documentado no openapi.yaml/descrição sem mudar o contrato)",
+        "Build e testes passam"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "Auditoria de segurança. src/main/java/com/prevention/fraud/validationflow/adapter/out/postgres/JdbcExecutionRepository.java:128 insere em idempotency_key e nada nunca remove linhas concluídas. A janela de retenção (quanto tempo um replay é honrado) é decisão do dono; retenção de flow_execution/node_execution/execution_audit_log fica fora desta story (precisa de decisão de negócio/compliance)."
     }
   ]
 }
