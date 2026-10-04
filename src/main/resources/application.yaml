@@ -11,3 +11,8 @@ management:
 logging:
   pattern:
     level: "%5p [%X{correlationId:-},%X{executionId:-},%X{flowKey:-},%X{flowVersion:-},%X{nodeId:-},%X{status:-}]"
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  writer-with-order-by-keys: true

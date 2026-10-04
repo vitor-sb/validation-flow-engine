@@ -1,0 +1,895 @@
+openapi: 3.1.0
+info:
+  description: "Flow definition management and validation executions. Every request\
+    \ except the health endpoints needs an `X-API-Key` header; the key fixes the tenant\
+    \ and its scopes. Operational probes are also served at `/actuator/health/liveness`\
+    \ and `/actuator/health/readiness` (public, Spring Actuator format)."
+  title: Validation Flow Engine API
+  version: v1
+servers:
+- description: This server
+  url: /
+tags:
+- description: "Create, version, validate, activate and archive flow definitions."
+  name: Flow Management
+- description: Run validation flows and read execution history.
+  name: Execution
+- description: Catalog of validator node types usable in a flow graph.
+  name: Node Types
+- description: Public liveness check.
+  name: Health
+paths:
+  /api/v1/executions:
+    get:
+      description: "Tenant's executions, paginated (`size` 1..100)."
+      operationId: list_1
+      parameters:
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+          minimum: 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+          maximum: 100
+          minimum: 1
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - validation:read
+      summary: List executions
+      tags:
+      - Execution
+    post:
+      description: Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped
+        to the tenant) a replay with the same payload returns the original execution;
+        a different payload returns 409.
+      operationId: start
+      parameters:
+      - description: Optional idempotency key (max 255 chars)
+        example: order-42
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ExecutionResponse"
+          description: Created
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - validation:execute
+      summary: Start an execution
+      tags:
+      - Execution
+  /api/v1/executions/{id}:
+    get:
+      description: Another tenant's id returns 404.
+      operationId: get_2
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - validation:read
+      summary: Get an execution
+      tags:
+      - Execution
+  /api/v1/executions/{id}/nodes:
+    get:
+      description: "One entry per node attempt, with masked snapshots."
+      operationId: nodes
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - validation:read
+      summary: List node attempts
+      tags:
+      - Execution
+  /api/v1/flows:
+    get:
+      description: "Tenant's flows, newest first; filters are optional. `size` is\
+        \ capped at 100."
+      operationId: list
+      parameters:
+      - in: query
+        name: flowKey
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - ARCHIVED
+      - in: query
+        name: userType
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: context
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - flow:read
+      summary: List flows
+      tags:
+      - Flow Management
+    post:
+      description: Creates a DRAFT; `version` is max+1 for the tenant and flowKey.
+        Tenant comes from the API key.
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFlowRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/FlowResponse"
+          description: Created
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - flow:write
+      summary: Create a flow (DRAFT)
+      tags:
+      - Flow Management
+  /api/v1/flows/validate:
+    post:
+      description: Checks a graph definition without persisting anything. Always 200;
+        `valid=false` lists the problems.
+      operationId: validate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateRequest"
+        required: true
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - flow:write
+      summary: Validate a graph
+      tags:
+      - Flow Management
+  /api/v1/flows/{id}:
+    get:
+      description: Another tenant's id returns 404.
+      operationId: get
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - flow:read
+      summary: Get a flow
+      tags:
+      - Flow Management
+    put:
+      description: "DRAFT: edited in place. ACTIVE: a new DRAFT version is created.\
+        \ ARCHIVED: 409."
+      operationId: update
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFlowRequest"
+        required: true
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - flow:write
+      summary: Update a flow
+      tags:
+      - Flow Management
+  /api/v1/flows/{id}/activate:
+    patch:
+      description: Validates the graph (422 INVALID_FLOW when invalid) and atomically
+        archives the currently ACTIVE version of the same userType/context.
+      operationId: activate
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+      security:
+      - apiKey:
+        - flow:activate
+      summary: Activate a DRAFT
+      tags:
+      - Flow Management
+  /api/v1/flows/{id}/archive:
+    patch:
+      description: Moves the flow to ARCHIVED.
+      operationId: archive
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - flow:activate
+      summary: Archive a flow
+      tags:
+      - Flow Management
+  /api/v1/health:
+    get:
+      description: Public endpoint (no API key). Returns 200 while the service is
+        up.
+      operationId: health
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+          description: OK
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      summary: Liveness check
+      tags:
+      - Health
+  /api/v1/node-types:
+    get:
+      description: All validator types registered in this deployment.
+      operationId: list_2
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NodeType"
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - flow:read
+      summary: List node types
+      tags:
+      - Node Types
+  /api/v1/node-types/{key}:
+    get:
+      description: One node type by key.
+      operationId: get_1
+      parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/NodeType"
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - flow:read
+      summary: Get a node type
+      tags:
+      - Node Types
+components:
+  responses:
+    BadRequest:
+      content:
+        application/json:
+          examples:
+            default:
+              value:
+                code: VALIDATION_ERROR
+                details:
+                - "displayName: must not be blank"
+                retryable: false
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: "Invalid request (VALIDATION_ERROR, MALFORMED_REQUEST, BAD_REQUEST,\
+        \ INVALID_INPUT)."
+    Conflict:
+      content:
+        application/json:
+          examples:
+            default:
+              value:
+                code: CONFLICT
+                details:
+                - flow is not DRAFT
+                retryable: false
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: "Conflict (CONFLICT): duplicate resource, wrong lifecycle state,\
+        \ or Idempotency-Key reused with a different payload."
+    Forbidden:
+      content:
+        application/json:
+          examples:
+            default:
+              value:
+                code: FORBIDDEN
+                details:
+                - missing scope
+                retryable: false
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: The key lacks the required scope.
+    NotFound:
+      content:
+        application/json:
+          examples:
+            default:
+              value:
+                code: FLOW_NOT_FOUND
+                details:
+                - flow not found
+                retryable: false
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: "Resource not found, or it belongs to another tenant (FLOW_NOT_FOUND,\
+        \ EXECUTION_NOT_FOUND)."
+    Unauthorized:
+      content:
+        application/json:
+          examples:
+            default:
+              value:
+                code: UNAUTHORIZED
+                details:
+                - authentication required
+                retryable: false
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: Missing or invalid `X-API-Key`.
+    Unprocessable:
+      content:
+        application/json:
+          examples:
+            default:
+              value:
+                code: INVALID_FLOW
+                details:
+                - "MISSING_START: no start node"
+                retryable: false
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      description: "The flow graph is invalid (INVALID_FLOW); details list `CODE:\
+        \ message` per problem."
+  schemas:
+    CreateFlowRequest:
+      type: object
+      properties:
+        context:
+          type: string
+          example: ONBOARDING
+          minLength: 1
+        description:
+          type: string
+          example: Validates a new individual customer
+        displayName:
+          type: string
+          example: PF onboarding
+          minLength: 1
+        flowKey:
+          type: string
+          example: onboarding
+          minLength: 1
+        graphDefinition:
+          type: object
+          additionalProperties: {}
+          description: "Graph: `startNodeId` + `nodes` map (type, dynamic `config`,\
+            \ `transitions`)"
+          example:
+            startNodeId: start
+            nodes:
+              start:
+                type: START
+                transitions:
+                - to: end
+              end:
+                type: END
+        inputContract:
+          type: array
+          items:
+            $ref: "#/components/schemas/InputFieldRequest"
+        metadata:
+          type: object
+          additionalProperties: {}
+          description: Free-form metadata
+          example:
+            owner: risk-team
+        userType:
+          type: string
+          example: PF
+          minLength: 1
+      required:
+      - context
+      - displayName
+      - flowKey
+      - graphDefinition
+      - userType
+    ErrorResponse:
+      description: Error body used by every non-2xx response.
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code
+          example: FLOW_NOT_FOUND
+        details:
+          type: array
+          description: Human-readable details
+          example:
+          - flow not found
+          items:
+            type: string
+            description: Human-readable details
+            example: "[\"flow not found\"]"
+        retryable:
+          type: boolean
+          description: True when retrying the same request may succeed
+    ExecutionResponse:
+      type: object
+      properties:
+        completedAt:
+          type: string
+          format: date-time
+        error:
+          type: object
+          additionalProperties: {}
+          description: Error info when FAILED (dynamic)
+          example:
+            code: VALIDATOR_FAILED
+        executionId:
+          type: string
+          format: uuid
+        flowKey:
+          type: string
+          example: onboarding
+        flowVersion:
+          type: integer
+          format: int32
+          example: 1
+        result:
+          type: object
+          additionalProperties: {}
+          description: Final context (dynamic); credential-named keys are masked
+          example:
+            nodes:
+              start: {}
+        startedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: COMPLETED
+    FlowResponse:
+      type: object
+      properties:
+        context:
+          type: string
+          example: ONBOARDING
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        description:
+          type: string
+        displayName:
+          type: string
+          example: PF onboarding
+        flowKey:
+          type: string
+          example: onboarding
+        graphDefinition:
+          type: object
+          additionalProperties: {}
+          description: "Graph: `startNodeId` + `nodes` map (type, dynamic `config`,\
+            \ `transitions`)"
+          example:
+            startNodeId: start
+            nodes:
+              start:
+                type: START
+                transitions:
+                - to: end
+              end:
+                type: END
+        id:
+          type: string
+          format: uuid
+        inputContract:
+          type: array
+          items:
+            $ref: "#/components/schemas/InputField"
+        metadata:
+          type: object
+          additionalProperties: {}
+          description: Free-form metadata
+          example:
+            owner: risk-team
+        status:
+          type: string
+          description: Lifecycle status
+          enum:
+          - DRAFT
+          - ACTIVE
+          - ARCHIVED
+        userType:
+          type: string
+          example: PF
+        version:
+          type: integer
+          format: int32
+          example: 1
+    InputField:
+      type: object
+      properties:
+        name:
+          type: string
+        required:
+          type: boolean
+        type:
+          type: string
+    InputFieldRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: cpf
+          minLength: 1
+        required:
+          type: boolean
+        type:
+          type: string
+          example: string
+          minLength: 1
+      required:
+      - name
+      - type
+    NodeType:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          description: Declared capabilities
+          example:
+          - RETRY
+          - TIMEOUT
+          items:
+            type: string
+          uniqueItems: true
+        key:
+          type: string
+          description: Value to use as the node `type` in a graph
+          example: DOCUMENT_CHECK
+        schema:
+          type: object
+          additionalProperties: {}
+          description: JSON-schema-like description of the node `config` object (dynamic)
+          example:
+            type: object
+            properties:
+              threshold:
+                type: number
+    StartRequest:
+      type: object
+      properties:
+        context:
+          type: string
+          example: ONBOARDING
+          minLength: 1
+        correlationId:
+          type: string
+          example: req-123
+        flowKey:
+          type: string
+          description: "Optional: pick the ACTIVE flow by key instead of userType+context"
+          example: onboarding
+        inputData:
+          type: object
+          additionalProperties: {}
+          description: "Dynamic input, validated against the flow's inputContract"
+          example:
+            cpf: "12345678900"
+        userType:
+          type: string
+          example: PF
+          minLength: 1
+      required:
+      - context
+      - inputData
+      - userType
+    UpdateFlowRequest:
+      type: object
+      properties:
+        context:
+          type: string
+          example: ONBOARDING
+          minLength: 1
+        description:
+          type: string
+        displayName:
+          type: string
+          example: PF onboarding
+          minLength: 1
+        graphDefinition:
+          type: object
+          additionalProperties: {}
+          description: "Graph: `startNodeId` + `nodes` map (type, dynamic `config`,\
+            \ `transitions`)"
+          example:
+            startNodeId: start
+            nodes:
+              start:
+                type: START
+                transitions:
+                - to: end
+              end:
+                type: END
+        inputContract:
+          type: array
+          items:
+            $ref: "#/components/schemas/InputFieldRequest"
+        metadata:
+          type: object
+          additionalProperties: {}
+          description: Free-form metadata
+          example:
+            owner: risk-team
+        userType:
+          type: string
+          example: PF
+          minLength: 1
+      required:
+      - context
+      - displayName
+      - graphDefinition
+      - userType
+    ValidateRequest:
+      type: object
+      properties:
+        graphDefinition:
+          type: object
+          additionalProperties: {}
+          description: "Graph: `startNodeId` + `nodes` map (type, dynamic `config`,\
+            \ `transitions`)"
+          example:
+            startNodeId: start
+            nodes:
+              start:
+                type: START
+                transitions:
+                - to: end
+              end:
+                type: END
+      required:
+      - graphDefinition
+  securitySchemes:
+    apiKey:
+      description: Static API key. Operations list the scope they require (403 when
+        missing).
+      in: header
+      name: X-API-Key
+      type: apiKey

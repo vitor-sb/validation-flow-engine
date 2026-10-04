@@ -17,6 +17,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.prevention.fraud.validationflow.application.ExecutionService;
 import com.prevention.fraud.validationflow.config.TenantPrincipal;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
@@ -30,14 +37,19 @@ import jakarta.validation.constraints.NotNull;
 
 @RestController
 @RequestMapping("/api/v1/executions")
+@Tag(name = "Execution")
 class ExecutionController {
 
-	record StartRequest(@NotBlank String userType, @NotBlank String context, @NotNull Map<String, Object> inputData,
-			String flowKey, String correlationId) {
+	record StartRequest(@NotBlank @Schema(example = "PF") String userType, @NotBlank @Schema(example = "ONBOARDING") String context,
+			@NotNull @Schema(description = "Dynamic input, validated against the flow's inputContract", example = "{\"cpf\":\"12345678900\"}") Map<String, Object> inputData,
+			@Schema(description = "Optional: pick the ACTIVE flow by key instead of userType+context", example = "onboarding") String flowKey,
+			@Schema(example = "req-123") String correlationId) {
 	}
 
-	record ExecutionResponse(UUID executionId, String flowKey, int flowVersion, String status, Instant startedAt,
-			Instant completedAt, Map<String, Object> result, Map<String, Object> error) {
+	record ExecutionResponse(UUID executionId, @Schema(example = "onboarding") String flowKey, @Schema(example = "1") int flowVersion,
+			@Schema(example = "COMPLETED") String status, Instant startedAt, Instant completedAt,
+			@Schema(description = "Final context (dynamic); credential-named keys are masked", example = "{\"nodes\":{\"start\":{}}}") Map<String, Object> result,
+			@Schema(description = "Error info when FAILED (dynamic)", example = "{\"code\":\"VALIDATOR_FAILED\"}") Map<String, Object> error) {
 	}
 
 	private final ExecutionService service;
@@ -51,7 +63,12 @@ class ExecutionController {
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	ExecutionResponse start(@AuthenticationPrincipal TenantPrincipal principal, @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+	@Operation(summary = "Start an execution", description = "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped to the tenant) a replay with the same payload returns the original execution; a different payload returns 409.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:execute"))
+	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
+	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
+	@ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict")
+	ExecutionResponse start(@AuthenticationPrincipal TenantPrincipal principal,
+			@Parameter(description = "Optional idempotency key (max 255 chars)", example = "order-42") @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
 			@Valid @RequestBody StartRequest r) {
 		if (idempotencyKey != null && !idempotencyKey.isBlank()) {
 			return toResponse(service.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
@@ -62,15 +79,21 @@ class ExecutionController {
 	}
 
 	@GetMapping("/{id}")
+	@Operation(summary = "Get an execution", description = "Another tenant's id returns 404.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:read"))
+	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
 	ExecutionResponse get(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id) {
 		return toResponse(service.get(principal.tenantId(), id));
 	}
 
 	@GetMapping("/{id}/nodes")
+	@Operation(summary = "List node attempts", description = "One entry per node attempt, with masked snapshots.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:read"))
+	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
 	List<NodeExecution> nodes(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id) {
 		return service.nodes(principal.tenantId(), id);
 	}
 
+	@Operation(summary = "List executions", description = "Tenant's executions, paginated (`size` 1..100).", security = @SecurityRequirement(name = "apiKey", scopes = "validation:read"))
+	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
 	@GetMapping
 	Page list(@AuthenticationPrincipal TenantPrincipal principal, @RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
