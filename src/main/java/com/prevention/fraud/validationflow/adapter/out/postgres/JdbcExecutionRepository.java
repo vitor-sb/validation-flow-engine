@@ -1,6 +1,7 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
 import java.sql.Timestamp;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import com.prevention.fraud.validationflow.application.ExecutionRepository;
 import com.prevention.fraud.validationflow.domain.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
+import com.prevention.fraud.validationflow.domain.NodeExecution;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -54,30 +56,60 @@ class JdbcExecutionRepository implements ExecutionRepository {
 
 	@Override
 	public Optional<FlowExecution> findById(String tenantId, UUID id) {
-		return jdbc.query("SELECT * FROM flow_execution WHERE tenant_id = ? AND id = ?", (rs, n) -> {
-			String result = rs.getString("result");
-			String error = rs.getString("error_info");
-			Timestamp done = rs.getTimestamp("completed_at");
-			return new FlowExecution(id, tenantId, rs.getObject("flow_definition_id", UUID.class),
-					rs.getString("flow_key"), rs.getInt("flow_version"),
-					json.readValue(rs.getString("flow_snapshot"), MAP), rs.getString("correlation_id"),
-					ExecutionStatus.valueOf(rs.getString("status")), json.readValue(rs.getString("input_data"), MAP),
-					json.readValue(rs.getString("context_data"), MAP),
-					result == null ? null : json.readValue(result, MAP),
-					error == null ? null : json.readValue(error, MAP), rs.getLong("lock_version"),
-					rs.getTimestamp("started_at").toInstant(), done == null ? null : done.toInstant());
-		}, tenantId, id).stream().findFirst();
+		return jdbc.query("SELECT * FROM flow_execution WHERE tenant_id = ? AND id = ?", (rs, n) -> read(rs), tenantId, id)
+				.stream().findFirst();
+	}
+
+	private FlowExecution read(java.sql.ResultSet rs) throws java.sql.SQLException {
+		Timestamp done = rs.getTimestamp("completed_at");
+		return new FlowExecution(rs.getObject("id", UUID.class), rs.getString("tenant_id"),
+				rs.getObject("flow_definition_id", UUID.class), rs.getString("flow_key"), rs.getInt("flow_version"),
+				map(rs.getString("flow_snapshot")), rs.getString("correlation_id"),
+				ExecutionStatus.valueOf(rs.getString("status")), map(rs.getString("input_data")),
+				map(rs.getString("context_data")), map(rs.getString("result")), map(rs.getString("error_info")),
+				rs.getLong("lock_version"), rs.getTimestamp("started_at").toInstant(),
+				done == null ? null : done.toInstant());
 	}
 
 	@Override
 	public void recordNode(String tenantId, UUID executionId, String nodeId, String nodeType, int attempt,
-			String status, Map<String, Object> output, Map<String, Object> error) {
+			String status, Map<String, Object> output, Map<String, Object> error, Map<String, Object> input,
+			java.time.Instant startedAt) {
 		jdbc.update("""
 				INSERT INTO node_execution (id, tenant_id, execution_id, node_id, node_type, attempt, status,
-				    output_data, error_info, completed_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, now())""", UUID.randomUUID(), tenantId, executionId,
-				nodeId, nodeType, attempt, status, json.writeValueAsString(output),
-				error == null ? null : json.writeValueAsString(error));
+				    input_snapshot, output_data, error_info, started_at, completed_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, now())""", UUID.randomUUID(), tenantId,
+				executionId, nodeId, nodeType, attempt, status, json.writeValueAsString(input),
+				json.writeValueAsString(output), error == null ? null : json.writeValueAsString(error),
+				Timestamp.from(startedAt));
+	}
+
+	@Override
+	public List<NodeExecution> findNodes(String tenantId, UUID executionId) {
+		return jdbc.query("""
+				SELECT * FROM node_execution WHERE tenant_id = ? AND execution_id = ?
+				ORDER BY started_at, completed_at, attempt""", (rs, n) -> {
+			Timestamp done = rs.getTimestamp("completed_at");
+			return new NodeExecution(rs.getString("node_id"), rs.getString("node_type"), rs.getInt("attempt"),
+					rs.getString("status"), map(rs.getString("input_snapshot")), map(rs.getString("output_data")),
+					map(rs.getString("error_info")), rs.getTimestamp("started_at").toInstant(),
+					done == null ? null : done.toInstant());
+		}, tenantId, executionId);
+	}
+
+	@Override
+	public List<FlowExecution> list(String tenantId, int limit, long offset) {
+		return jdbc.query("SELECT * FROM flow_execution WHERE tenant_id = ? ORDER BY started_at DESC, id LIMIT ? OFFSET ?",
+				(rs, n) -> read(rs), tenantId, limit, offset);
+	}
+
+	@Override
+	public long count(String tenantId) {
+		return jdbc.queryForObject("SELECT count(*) FROM flow_execution WHERE tenant_id = ?", Long.class, tenantId);
+	}
+
+	private Map<String, Object> map(String j) {
+		return j == null ? null : json.readValue(j, MAP);
 	}
 
 	@Override

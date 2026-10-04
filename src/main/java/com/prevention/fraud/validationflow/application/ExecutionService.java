@@ -1,11 +1,13 @@
 package com.prevention.fraud.validationflow.application;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.time.Duration;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,10 +17,17 @@ import java.util.concurrent.TimeoutException;
 import com.prevention.fraud.validationflow.domain.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
+import com.prevention.fraud.validationflow.domain.NodeExecution;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
 public class ExecutionService {
+
+	private static final Logger log = LoggerFactory.getLogger(ExecutionService.class);
 
 	private final FlowService flows;
 
@@ -55,15 +64,25 @@ public class ExecutionService {
 		FlowExecution ex = FlowExecution.pending(tenantId, flow, correlationId, inputData);
 		repository.insert(ex);
 		ex = save(ex.start());
+		MDC.put("correlationId", String.valueOf(correlationId));
+		MDC.put("executionId", ex.id().toString());
+		MDC.put("flowKey", ex.flowKey());
+		MDC.put("flowVersion", String.valueOf(ex.flowVersion()));
 		// fresh map per execution: nothing is shared between runs
 		Map<String, Object> ctx = new HashMap<>();
 		ctx.put("inputData", inputData);
 		ctx.put("nodes", new LinkedHashMap<String, Object>());
 		try {
-			return walk(ex, ctx);
+			FlowExecution done = walk(ex, ctx);
+			MDC.put("status", done.status().name());
+			log.info("execution finished");
+			return done;
 		}
 		catch (RuntimeException e) {
 			return save(ex.fail(ctx, "EXECUTION_ERROR", String.valueOf(e.getMessage())));
+		}
+		finally {
+			MDC.clear();
 		}
 	}
 
@@ -76,7 +95,7 @@ public class ExecutionService {
 			String type = (String) node.get("type");
 			Map<String, Object> config = node.get("config") == null ? Map.of() : (Map<String, Object>) node.get("config");
 			switch (type) {
-				case "START", "DECISION" -> repository.recordNode(ex.tenantId(), ex.id(), id, type, 1, "COMPLETED", Map.of(), null);
+				case "START", "DECISION" -> recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
 				case "VALIDATION" -> {
 					ValidatorStrategy v = registry.find((String) config.get("validatorType")).orElse(null);
 					if (v == null) {
@@ -92,7 +111,7 @@ public class ExecutionService {
 					((Map<String, Object>) ctx.get("nodes")).put(id, out);
 				}
 				case "END" -> {
-					repository.recordNode(ex.tenantId(), ex.id(), id, type, 1, "COMPLETED", Map.of(), null);
+					recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
 					Map<String, Object> result = new LinkedHashMap<>();
 					result.put("endNodeId", id);
 					result.put("config", config);
@@ -137,10 +156,11 @@ public class ExecutionService {
 		for (int attempt = 1;; attempt++) {
 			String status = "FAILED";
 			Map<String, Object> error;
+			Instant started = Instant.now();
 			try {
 				var r = call(v, ctx, config, timeout);
-				repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, r.success() ? "COMPLETED" : "FAILED",
-						r.output() == null ? Map.of() : r.output(), null);
+				recordNode(ex, nodeId, type, attempt, r.success() ? "COMPLETED" : "FAILED",
+						r.output() == null ? Map.of() : r.output(), null, ctx, started);
 				return new Attempt(r, null, attempt);
 			}
 			catch (TimeoutException e) {
@@ -154,7 +174,7 @@ public class ExecutionService {
 			catch (RuntimeException e) {
 				error = error("VALIDATOR_ERROR", String.valueOf(e.getMessage()), false);
 			}
-			repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, Map.of(), error);
+			recordNode(ex, nodeId, type, attempt, status, Map.of(), error, ctx, started);
 			meters.counter("validation.node.error", "validator", v.key(), "code", (String) error.get("code")).increment();
 			if (!(Boolean) error.get("retryable") || attempt >= max) {
 				return new Attempt(null, error, attempt);
@@ -192,6 +212,40 @@ public class ExecutionService {
 		catch (ExecutionException e) {
 			throw e.getCause() instanceof RuntimeException re ? re : new IllegalStateException(e.getCause());
 		}
+	}
+
+	/** Persists the attempt and logs it; payloads only appear in logs masked. */
+	private void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
+			Map<String, Object> output, Map<String, Object> error, Map<String, Object> ctx, Instant started) {
+		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, output, error, ctx, started);
+		MDC.put("nodeId", nodeId);
+		MDC.put("status", status);
+		try {
+			log.info("node attempt={} type={} output={} error={}", attempt, type, LogMasker.mask(output),
+					LogMasker.mask(error));
+		}
+		finally {
+			MDC.remove("nodeId");
+			MDC.remove("status");
+		}
+	}
+
+	public FlowExecution get(String tenantId, UUID id) {
+		return repository.findById(tenantId, id)
+				.orElseThrow(() -> FlowException.executionNotFound());
+	}
+
+	public List<NodeExecution> nodes(String tenantId, UUID id) {
+		get(tenantId, id);
+		return repository.findNodes(tenantId, id);
+	}
+
+	public List<FlowExecution> list(String tenantId, int page, int size) {
+		return repository.list(tenantId, size, (long) page * size);
+	}
+
+	public long count(String tenantId) {
+		return repository.count(tenantId);
 	}
 
 	private static Map<String, Object> error(String code, String message, boolean retryable) {

@@ -112,3 +112,12 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - A validator returning success=false is still not an error (transitions decide); only thrown exceptions trigger retry/failure.
   - SimpleMeterRegistry is shared across tests in ExecutionTest: call `meters.clear()` before asserting counts.
 ---
+## 2026-10-03 - US-013
+- node_execution now stores input_snapshot (ctx at attempt start) and real started_at; `ExecutionRepository.recordNode(..., output, error, input, startedAt)`. New port methods findNodes/list/count (all tenant-filtered). Transition audit (with observed) already existed from US-011.
+- GET /api/v1/executions/{id}, /{id}/nodes, and GET /api/v1/executions?page&size (size 1..100) -> `{items,page,size,total}`; other tenant -> 404 EXECUTION_NOT_FOUND (FlowException.executionNotFound).
+- Logging: ExecutionService sets MDC (correlationId, executionId, flowKey, flowVersion, nodeId, status), pattern in application.yaml; payloads in logs go through `application/LogMasker` (masks keys matching document/cpf/cnpj/token/password/secret/authorization/api-key).
+- Files: domain/NodeExecution, application/{ExecutionService,ExecutionRepository,LogMasker,FlowException}, JdbcExecutionRepository, ExecutionController, RestExceptionHandler, application.yaml, ExecutionTest, LogMaskerTest
+- **Learnings for future iterations:**
+  - input_snapshot stores the raw ctx (unmasked, it's the audit record); masking applies to technical logs only. Controllers have no MockMvc test for the new GETs (service-level tenant test in ExecutionTest instead).
+  - Spring validates @RequestParam constraints natively (no @Validated needed).
+---

@@ -37,6 +37,8 @@ class RestExceptionHandler {
 		return switch (e.kind()) {
 			case NOT_FOUND -> org.springframework.http.ResponseEntity.status(HttpStatus.NOT_FOUND)
 					.body(new ErrorResponse("FLOW_NOT_FOUND", false, java.util.List.of(e.getMessage())));
+			case EXECUTION_NOT_FOUND -> org.springframework.http.ResponseEntity.status(HttpStatus.NOT_FOUND)
+					.body(new ErrorResponse("EXECUTION_NOT_FOUND", false, java.util.List.of(e.getMessage())));
 			case CONFLICT -> org.springframework.http.ResponseEntity.status(HttpStatus.CONFLICT)
 					.body(new ErrorResponse("CONFLICT", false, java.util.List.of(e.getMessage())));
 			case INVALID_CONFIGURATION -> org.springframework.http.ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

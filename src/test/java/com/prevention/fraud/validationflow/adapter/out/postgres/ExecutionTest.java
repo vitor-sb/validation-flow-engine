@@ -243,4 +243,26 @@ class ExecutionTest {
 		assertEquals(2.0, meters.counter("validation.node.timeout", "validator", "slow").count());
 	}
 
+	@Test
+	void nodeHistoryAuditAndTenantScopedQueries() {
+		activate("k-hist", "CH", graph(true, "h"), List.of(new InputField("ok", "boolean", true)));
+		FlowExecution e = executions.execute("t", "k-hist", "PF", "CH", Map.of("ok", true), "corr-h");
+		var nodes = executions.nodes("t", e.id());
+		assertEquals(3, nodes.size());
+		assertEquals("s", nodes.get(0).nodeId());
+		var v = nodes.get(1);
+		assertEquals(Map.of("ok", true), ((Map<?, ?>) v.inputSnapshot().get("inputData")));
+		assertEquals(1, v.attempt());
+		assertTrue(v.startedAt() != null && v.completedAt() != null);
+		var audit = jdbc.queryForList("SELECT details::text AS d FROM execution_audit_log WHERE execution_id = ? AND event_type = 'TRANSITION_EVALUATED'", e.id());
+		assertTrue(audit.stream().anyMatch(r -> r.get("d").toString().contains("observed")));
+		// tenant isolation
+		assertThrows(FlowException.class, () -> executions.get("other", e.id()));
+		assertThrows(FlowException.class, () -> executions.nodes("other", e.id()));
+		assertEquals(0, executions.list("other", 0, 10).size());
+		assertEquals(0L, executions.count("other"));
+		assertTrue(executions.count("t") >= 1);
+		assertTrue(executions.list("t", 0, 1).size() == 1);
+	}
+
 }

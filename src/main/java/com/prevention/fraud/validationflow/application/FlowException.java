@@ -7,7 +7,7 @@ import com.prevention.fraud.validationflow.domain.GraphValidator.GraphError;
 /** Business failures of flow operations; mapped to HTTP by the REST adapter. */
 public class FlowException extends RuntimeException {
 
-	public enum Kind { NOT_FOUND, CONFLICT, INVALID, INVALID_CONFIGURATION, INVALID_INPUT }
+	public enum Kind { NOT_FOUND, CONFLICT, INVALID, INVALID_CONFIGURATION, INVALID_INPUT, EXECUTION_NOT_FOUND }
 
 	private final Kind kind;
 
@@ -21,6 +21,10 @@ public class FlowException extends RuntimeException {
 
 	public static FlowException notFound() {
 		return new FlowException(Kind.NOT_FOUND, "flow not found", List.of());
+	}
+
+	public static FlowException executionNotFound() {
+		return new FlowException(Kind.EXECUTION_NOT_FOUND, "execution not found", List.of());
 	}
 
 	public static FlowException conflict(String message) {
