@@ -121,3 +121,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - input_snapshot stores the raw ctx (unmasked, it's the audit record); masking applies to technical logs only. Controllers have no MockMvc test for the new GETs (service-level tenant test in ExecutionTest instead).
   - Spring validates @RequestParam constraints natively (no @Validated needed).
 ---
+## 2026-10-03 - US-020
+- RestExceptionHandler now extends ResponseEntityExceptionHandler; `handleExceptionInternal` maps every framework exception (type mismatch, enum/query param, 405, route 404, ResponseStatusException) to `ErrorResponse` (codes BAD_REQUEST, METHOD_NOT_ALLOWED, NOT_FOUND, UNSUPPORTED_MEDIA_TYPE); catch-all `Exception` -> 500 INTERNAL_ERROR (retryable) with generic detail, stack trace only in the log.
+- Files: RestExceptionHandler, ErrorResponseTest (MockMvc, 6 cases incl. no-leak check)
+- **Learnings for future iterations:**
+  - Override the `handleXxx` hooks of ResponseEntityExceptionHandler instead of adding @ExceptionHandler for framework exceptions (duplicates cause ambiguous-mapping errors).
+  - Framework-error details come from ProblemDetail (`ErrorResponseException.getBody().getDetail()`), which is safe to expose.
+  - The catch-all logs a stack trace at ERROR in tests; expected noise.
+---
