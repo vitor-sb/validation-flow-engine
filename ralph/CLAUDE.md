@@ -107,3 +107,8 @@ NEVER write the completion tag in any other context — not to say it doesn't ap
 - Commit frequently
 - Keep CI green
 - Read the Codebase Patterns section in progress.txt before starting
+- Every error response must use `ErrorResponse`, including framework errors (invalid enum/query params, malformed JSON, type mismatches). Never let Spring's default error body leak.
+- Every new REST endpoint needs at least one HTTP-level test, including tenant isolation (another tenant's id returns 404).
+- Always re-run the full test suite after your LAST change, before committing.
+- Never loosen validation, skip a check, or mock a component just to make a story pass. If a story depends on something that doesn't exist yet, record it in progress.txt and in the story notes instead of working around it.
+- Credentials (tokens, passwords, secrets, API keys) must never be persisted or logged in plain text.

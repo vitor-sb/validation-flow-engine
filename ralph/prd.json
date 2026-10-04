@@ -216,6 +216,64 @@
       "notes": ""
     },
     {
+      "id": "US-020",
+      "title": "Erros padronizados (ErrorResponse) inclusive do framework",
+      "description": "Como consumidor da API, quero que todo erro siga o contrato `ErrorResponse`, sem vazar o corpo padrão do Spring.",
+      "acceptanceCriteria": [
+        "Enum/query param inválido (ex.: `status` em `GET /flows`), JSON malformado, type mismatch (ex.: UUID inválido no path) e método HTTP não suportado retornam `ErrorResponse` (400/405), nunca o corpo padrão do Spring",
+        "Testes HTTP (MockMvc) provam cada um desses casos, assertando o formato `ErrorResponse` (`code`, `retryable`, `details`)",
+        "Erros 404 de rota inexistente e 500 inesperados também usam `ErrorResponse` sem vazar stack trace",
+        "Build e testes passam"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Testes HTTP dos endpoints de execução",
+      "description": "Como time, quero testes HTTP para `GET /executions/{id}`, `/executions/{id}/nodes` e `/executions` (US-013), hoje cobertos só em nível de serviço.",
+      "acceptanceCriteria": [
+        "Testes HTTP cobrindo sucesso dos três endpoints",
+        "Paginação de `GET /executions` (page/size, limite de size, total)",
+        "404 `EXECUTION_NOT_FOUND` para id inexistente",
+        "Isolamento de tenant: id de execução de outro tenant retorna 404 em `/{id}` e `/{id}/nodes`, e a listagem não inclui execuções de outro tenant",
+        "Build e testes passam"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Mascarar segredos no snapshot de auditoria",
+      "description": "Como responsável de segurança, quero que credenciais não sejam persistidas em texto puro no `input_snapshot` de `node_execution`.",
+      "acceptanceCriteria": [
+        "Tokens, senhas, secrets, authorization e API keys são mascarados no `input_snapshot` persistido (reutilizar/estender `LogMasker` com política separada de logs)",
+        "Documentos (CPF/CNPJ) continuam SEM máscara no banco (são dados de auditoria)",
+        "Teste de integração prova as duas coisas: segredo mascarado e CPF/CNPJ íntegro no snapshot gravado",
+        "Segredos também não aparecem em texto puro em logs nem em `output_data`/`error_info` persistidos",
+        "Build e testes passam"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Contrato de idempotência e cancelamento em timeout",
+      "description": "Como desenvolvedor de validators, quero um contrato claro para retry após timeout, evitando execuções concorrentes do mesmo validator.",
+      "acceptanceCriteria": [
+        "Javadoc de `ValidatorStrategy` documenta que implementações DEVEM ser idempotentes (podem ser re-executadas após timeout/retry)",
+        "No timeout, a tarefa em andamento é cancelada/interrompida (`Future.cancel(true)`) antes do retry",
+        "Teste prova que, após timeout, o validator em background é interrompido e não continua rodando enquanto o retry executa",
+        "Build e testes passam"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
       "id": "US-014",
       "title": "Idempotência no início de execução",
       "description": "Como sistema consumidor, quero reenviar `POST /executions` com a mesma `Idempotency-Key` sem duplicar a operação.",
@@ -226,7 +284,7 @@
         "Duas requisições simultâneas com a mesma chave criam apenas uma execução (teste de concorrência)",
         "Build e testes passam"
       ],
-      "priority": 14,
+      "priority": 18,
       "passes": false,
       "notes": ""
     },
@@ -239,11 +297,14 @@
         "Filho executa como `flow_execution` com `parent_execution_id`/`parent_node_id`; usa a versão ativa no momento da chamada (ver Questões em aberto)",
         "Filho recebe só o subconjunto mapeado e não altera o contexto do pai; o pai recebe só o `outputMapping`",
         "Profundidade acima de `maxDepth` ou composição cíclica (A→B→A) é rejeitada na ativação e em runtime",
-        "Build e testes passam"
+        "Build e testes passam",
+        "Composição cíclica entre fluxos (direta ou indireta, ex.: A→B→A) é rejeitada na validação/ativação com código de erro específico (ex.: `SUB_FLOW_CYCLE_DETECTED`), com teste",
+        "Execução de `SUB_FLOW` funciona de ponta a ponta (substitui o `UNSUPPORTED_NODE_TYPE` da US-011): teste executa pai→filho, verifica `outputMapping` no contexto do pai e `parent_execution_id`/`parent_node_id` no filho",
+        "Limite `maxDepth` é imposto em runtime: cadeia mais profunda que o limite falha a execução com erro explícito (ex.: `SUB_FLOW_DEPTH_EXCEEDED`), com teste"
       ],
-      "priority": 15,
+      "priority": 19,
       "passes": false,
-      "notes": ""
+      "notes": "Depende de validadores reais para fluxos úteis, mas testes usam validator fake. Não afrouxar validação para contornar."
     },
     {
       "id": "US-016",
@@ -255,7 +316,7 @@
         "Execução registra `tenantId`, `flowVersion` e as conditions/dados de contexto usados",
         "Build e testes passam"
       ],
-      "priority": 16,
+      "priority": 20,
       "passes": false,
       "notes": ""
     },
@@ -269,7 +330,7 @@
         "Condition `inputData.groups CONTAINS \"X\"` seleciona o grupo; resultado e documentos efetivamente aplicados são registrados na execução",
         "Build e testes passam"
       ],
-      "priority": 17,
+      "priority": 21,
       "passes": false,
       "notes": ""
     },
@@ -283,7 +344,7 @@
         "Nenhuma meta de volume (35–50 mi/dia, 800–1.500/s) é tratada como requisito; resultado vira linha de base",
         "Build e testes passam"
       ],
-      "priority": 18,
+      "priority": 22,
       "passes": false,
       "notes": ""
     },
@@ -300,7 +361,7 @@
         "O arquivo gerado é validado no build (ex.: linter Spectral/swagger-parser)",
         "Build e testes passam"
       ],
-      "priority": 19,
+      "priority": 23,
       "passes": false,
       "notes": ""
     }
