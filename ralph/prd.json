@@ -420,6 +420,7 @@
         "`ValidatorException`: a mensagem continua sendo persistida como está (responsabilidade de quem escreve o validador); o Javadoc de `ValidatorException` e de `ValidatorStrategy` documenta que mensagens não podem conter credenciais nem dados de entrada",
         "`RestExceptionHandler.unexpected`: o log do stack trace continua; a resposta HTTP nunca inclui a mensagem da exceção (hoje já devolve a mensagem fixa \"unexpected error\"; manter e cobrir com teste HTTP que força uma exceção com segredo na mensagem)",
         "`flow_execution.error_info` recebe o mesmo tratamento de `node_execution.error_info` (mesma regra acima e mesma máscara por chave); sem regex para detectar segredos dentro de strings",
+        "Substituição exata de valores conhecidos: nas mensagens de erro persistidas e logadas (incluindo as de `ValidatorException`), cada valor literal de credencial do input (valores das chaves que `LogMasker` já reconhece como credencial, inclusive em estruturas aninhadas) é trocado por `***` via comparação de string exata (`String.replace`), sem regex nem heurística; valores vazios são ignorados",
         "Teste de integração com Postgres real: envia `token` no input com condição sobre `inputData.token`, validator que falha com o token na mensagem; depois verifica que o valor não aparece em NENHUMA tabela (varre todas as tabelas via `::text`) nem na saída de log capturada",
         "Build e testes passam"
       ],
