@@ -223,3 +223,12 @@ Started: Sat Oct  3 19:21:45 -03 2026
 - **Learnings for future iterations:**
   - Endpoints needing conditional headers return `ResponseEntity` instead of `@ResponseStatus`; document the header with `@ApiResponse(headers=@Header)`.
 ---
+## 2026-10-04 - US-027
+- flow_execution.input_data is persisted via maskSecrets (engine keeps the original in memory). TRANSITION_EVALUATED `observed` is "***" for credential fields, recursively for AND/OR/NOT (mirrors the condition tree). Unexpected RuntimeExceptions (runWithRetry, run) persist only code + fixed "unexpected error" + `exception` class name; the original message is only logged, redacted. Known credential values from ctx (LogMasker.credentialValues) are replaced by `***` with String.replace in node error maps, flow errorInfo (in `save`) and those logs; ValidatorException/ValidatorStrategy Javadoc documents the no-secrets-in-messages rule. RestExceptionHandler.unexpected unchanged (ErrorResponseTest.unexpectedErrorDoesNotLeakDetails already covers a secret in the message).
+- Test: ExecutionTest.credentialsNeverReachAnyTableOrLog (real Postgres; scans every public table via `::text`, captures ExecutionService logs). Full suite: 99 green.
+- Files: LogMasker, ExecutionService, ValidatorException, ValidatorStrategy, ExecutionTest, ralph/prd.json
+- **Learnings for future iterations:**
+  - Redaction is by exact known value only (no regex): a secret echoed under a non-credential key in a validator *output* is not caught.
+  - The execution returned by POST /executions has the in-memory input; GET later returns the masked input_data.
+  - flow_definition.snapshot stores graph literals, so don't put secrets as condition values (use EXISTS in tests).
+---

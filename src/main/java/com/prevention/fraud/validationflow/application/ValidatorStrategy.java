@@ -9,6 +9,9 @@ import java.util.Set;
  * <p>Implementations MUST be idempotent: the engine may re-execute them after a timeout or a retryable failure.
  * On timeout the running task is cancelled with {@code Future.cancel(true)} before the retry starts, so
  * implementations should react to thread interruption and stop work promptly.
+ *
+ * <p>Messages of {@link ValidatorException} are persisted and logged verbatim: they MUST NOT contain credentials or
+ * input data. Other exceptions are never persisted with their message.
  */
 public interface ValidatorStrategy {
 

@@ -425,7 +425,7 @@
         "Build e testes passam"
       ],
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "notes": "Confirmado em execução real: input_data = {\"token\": \"SECRET-TOKEN-123\"} e audit observed = \"SECRET-TOKEN-123\" em texto puro. Também sem máscara: flow_execution.error_info (ExecutionService.save) e mensagens de erro persistidas/logadas só mascaradas por nome de chave. Confirmado: RestExceptionHandler.unexpected (linha 62-64) já devolve só 'unexpected error' na resposta; só o log leva a exceção."
     }
   ]

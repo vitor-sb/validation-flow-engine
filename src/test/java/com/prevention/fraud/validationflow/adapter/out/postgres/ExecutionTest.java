@@ -133,6 +133,23 @@ class ExecutionTest {
 		}
 	};
 
+	/** Fails with the credential in the message: a ValidatorException (known value replaced) or a RuntimeException. */
+	static ValidatorStrategy leakingFailure(String key, boolean domainException) {
+		return new ValidatorStrategy() {
+			public String key() {
+				return key;
+			}
+
+			public ValidationResult execute(ValidationInput in) {
+				String token = (String) ((Map<?, ?>) in.data().get("inputData")).get("token");
+				if (domainException) {
+					throw new ValidatorException("BAD_TOKEN", "rejected " + token, false);
+				}
+				throw new IllegalStateException("boom " + token);
+			}
+		};
+	}
+
 	static Map<String, Object> cond(String field, Object value) {
 		return Map.of("operator", "EQUALS", "field", field, "value", value);
 	}
@@ -161,7 +178,8 @@ class ExecutionTest {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		jdbc = new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()));
 		var json = JsonMapper.builder().build();
-		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY, HANGING));
+		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY, HANGING,
+				leakingFailure("leak-domain", true), leakingFailure("leak-runtime", false)));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
 		executions = new ExecutionService(flows, exRepo, registry, meters, java.time.Duration.ofHours(1));
@@ -172,6 +190,52 @@ class ExecutionTest {
 				new FlowService.CreateFlow(key, "PF", ctx, "d", null, g, contract, null));
 		flows.activate("t", d.id());
 		return d.id();
+	}
+
+	@Test
+	void credentialsNeverReachAnyTableOrLog() {
+		String token = "SECRET-TOKEN-123";
+		var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+		appender.start();
+		var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(ExecutionService.class);
+		logger.addAppender(appender);
+		try {
+			for (String validator : List.of("leak-domain", "leak-runtime")) {
+				Map<String, Object> exists = Map.of("operator", "EXISTS", "field", "inputData.token");
+				Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
+						"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "v", "condition",
+								Map.of("operator", "AND", "conditions", List.of(exists,
+										Map.of("operator", "NOT", "conditions", List.of(exists))))), Map.of("to", "v"))),
+						"v", Map.of("type", "VALIDATION", "config", Map.of("validatorType", validator),
+								"transitions", List.of(Map.of("to", "e"))),
+						"e", Map.of("type", "END")));
+				activate("mask-" + validator, "CM-" + validator, g, List.of());
+				FlowExecution f = executions.execute("t", null, "PF", "CM-" + validator,
+						Map.of("token", token, "nested", Map.of("apiKey", "NESTED-KEY-9")), null);
+				assertEquals(ExecutionStatus.FAILED, f.status());
+				assertFalse(f.errorInfo().toString().contains(token), f.errorInfo().toString());
+				if (validator.equals("leak-runtime")) {
+					assertEquals("unexpected error", f.errorInfo().get("message"));
+				}
+				assertEquals("***", jdbc.queryForObject("SELECT input_data->>'token' FROM flow_execution WHERE id = ?",
+						String.class, f.id()));
+			}
+		}
+		finally {
+			logger.detachAppender(appender);
+		}
+		var tables = jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+				String.class);
+		for (String table : tables) {
+			for (String secret : List.of(token, "NESTED-KEY-9")) {
+				assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM \"" + table + "\" t WHERE t::text LIKE ?",
+						Integer.class, "%" + secret + "%"), table);
+			}
+		}
+		assertTrue(appender.list.stream().noneMatch(e -> e.getFormattedMessage().contains(token)
+				|| e.getThrowableProxy() != null));
+		assertTrue(jdbc.queryForObject("SELECT count(*) FROM execution_audit_log WHERE details::text LIKE '%***%'",
+				Integer.class) > 0);
 	}
 
 	@Test
