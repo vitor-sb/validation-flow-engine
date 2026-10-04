@@ -66,11 +66,15 @@ public class ExecutionService {
 		this.meters = meters;
 	}
 
+	/** Result of an idempotent start; {@code replayed} when an earlier execution was returned. */
+	public record Outcome(FlowExecution execution, boolean replayed) {
+	}
+
 	/**
 	 * Same as {@link #execute} but deduplicated per (tenant, key): a repeat with the same payload returns the original
 	 * execution, a different payload is a 409, and concurrent calls run the flow once (the loser waits for the winner).
 	 */
-	public FlowExecution executeIdempotent(String tenantId, String key, String flowKey, String userType,
+	public Outcome executeIdempotent(String tenantId, String key, String flowKey, String userType,
 			String context, Map<String, Object> inputData, String correlationId) {
 		String hash = hash(Arrays.asList(flowKey, userType, context, inputData, correlationId));
 		long deadline = System.nanoTime() + IDEMPOTENCY_WAIT.toNanos();
@@ -85,7 +89,7 @@ public class ExecutionService {
 					throw e;
 				}
 				repository.completeIdempotency(tenantId, key, ex.id());
-				return ex;
+				return new Outcome(ex, false);
 			}
 			var claim = repository.findIdempotency(tenantId, key);
 			if (claim.isPresent()) {
@@ -93,7 +97,7 @@ public class ExecutionService {
 					throw FlowException.conflict("Idempotency-Key was already used with a different payload");
 				}
 				if (claim.get().executionId() != null) {
-					return get(tenantId, claim.get().executionId());
+					return new Outcome(get(tenantId, claim.get().executionId()), true);
 				}
 			}
 			if (System.nanoTime() > deadline) {

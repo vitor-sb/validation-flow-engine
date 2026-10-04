@@ -215,3 +215,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - `@Pattern/@Min` on request params/headers raise HandlerMethodValidationException -> code BAD_REQUEST (only @Valid bodies give VALIDATION_ERROR).
   - Executions list is shared across tests in the same container; assert on before/after totals, not absolutes.
 ---
+---
+## 2026-10-04 - US-026
+- `ExecutionService.executeIdempotent` now returns `Outcome(execution, replayed)`; `ExecutionController.start` returns `ResponseEntity` (201) and adds `Idempotent-Replayed: true` only when replayed (including a concurrent loser that waited for the winner). First call / no key: no header, same body. openapi.yaml documents the header on the 201 response (regenerated).
+- Test: ExecutionHttpTest.idempotencyKeyReplaysSamePayloadAndRejectsDifferentOne extended (first call, replay, other tenant same key, no key). Full suite: 80 green.
+- Files: ExecutionService, ExecutionController, ExecutionHttpTest, openapi.yaml, ralph/prd.json
+- **Learnings for future iterations:**
+  - Endpoints needing conditional headers return `ResponseEntity` instead of `@ResponseStatus`; document the header with `@ApiResponse(headers=@Header)`.
+---

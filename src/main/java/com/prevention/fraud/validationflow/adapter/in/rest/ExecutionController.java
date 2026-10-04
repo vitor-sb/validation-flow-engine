@@ -14,11 +14,12 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -63,20 +64,25 @@ class ExecutionController {
 	}
 
 	@PostMapping
-	@ResponseStatus(HttpStatus.CREATED)
-	@Operation(summary = "Start an execution", description = "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped to the tenant) a replay with the same payload returns the original execution; a different payload returns 409.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:execute"))
+	@Operation(summary = "Start an execution", description = "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped to the tenant) a replay with the same payload returns the original execution, flagged with `Idempotent-Replayed: true`; a different payload returns 409.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:execute"))
+	@ApiResponse(responseCode = "201", description = "Execution created or replayed", headers = @Header(name = "Idempotent-Replayed", description = "`true` only when the response replays an earlier call with the same `Idempotency-Key`", schema = @Schema(type = "string", allowableValues = "true")))
 	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
 	@ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict")
-	ExecutionResponse start(@AuthenticationPrincipal TenantPrincipal principal,
+	ResponseEntity<ExecutionResponse> start(@AuthenticationPrincipal TenantPrincipal principal,
 			@Parameter(description = "Optional idempotency key (max 255 chars of [A-Za-z0-9._:-])", example = "order-42") @RequestHeader(name = "Idempotency-Key", required = false) @Pattern(regexp = "[A-Za-z0-9._:-]{0,255}", message = "must be at most 255 chars of [A-Za-z0-9._:-]") String idempotencyKey,
 			@Valid @RequestBody StartRequest r) {
 		if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-			return toResponse(service.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
-					r.context(), r.inputData(), r.correlationId()));
+			var o = service.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
+					r.context(), r.inputData(), r.correlationId());
+			var created = ResponseEntity.status(HttpStatus.CREATED);
+			if (o.replayed()) {
+				created.header("Idempotent-Replayed", "true");
+			}
+			return created.body(toResponse(o.execution()));
 		}
-		return toResponse(service.execute(principal.tenantId(), r.flowKey(), r.userType(), r.context(),
-				r.inputData(), r.correlationId()));
+		return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(service.execute(principal.tenantId(),
+				r.flowKey(), r.userType(), r.context(), r.inputData(), r.correlationId())));
 	}
 
 	@GetMapping("/{id}")

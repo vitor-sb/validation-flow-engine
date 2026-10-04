@@ -61,9 +61,9 @@ paths:
       tags:
       - Execution
     post:
-      description: Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped
-        to the tenant) a replay with the same payload returns the original execution;
-        a different payload returns 409.
+      description: "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped\
+        \ to the tenant) a replay with the same payload returns the original execution,\
+        \ flagged with `Idempotent-Replayed: true`; a different payload returns 409."
       operationId: start
       parameters:
       - description: "Optional idempotency key (max 255 chars of [A-Za-z0-9._:-])"
@@ -86,7 +86,16 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ExecutionResponse"
-          description: Created
+          description: Execution created or replayed
+          headers:
+            Idempotent-Replayed:
+              description: '`true` only when the response replays an earlier call
+                with the same `Idempotency-Key`'
+              schema:
+                type: string
+                enum:
+                - "true"
+              style: simple
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

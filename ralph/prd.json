@@ -406,7 +406,7 @@
         "Build e testes passam"
       ],
       "priority": 26,
-      "passes": false,
+      "passes": true,
       "notes": "Confirmado: hoje o replay não tem header nem campo que o identifique (ExecutionController.start). Observação: o corpo do replay é semanticamente igual mas não byte a byte (completedAt perde nanossegundos, ordem das chaves de result muda pelo JSONB)."
     },
     {

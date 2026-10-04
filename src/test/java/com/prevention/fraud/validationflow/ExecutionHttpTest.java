@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 /** HTTP-level tests of the execution read endpoints against a real Postgres (two tenants). */
 @SpringBootTest(properties = {
@@ -140,16 +141,23 @@ class ExecutionHttpTest {
 	@Test
 	void idempotencyKeyReplaysSamePayloadAndRejectsDifferentOne() throws Exception {
 		activateFlow("ka", "idem");
-		String first = id(body(startIdem("ka", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())));
-		// same payload (different key order) -> original execution
-		String again = id(body(startIdem("ka", "k-1", "idem", "{\"b\":2,\"a\":1}").andExpect(status().isCreated())));
+		String first = id(body(startIdem("ka", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())
+				.andExpect(header().doesNotExist("Idempotent-Replayed"))));
+		// same payload (different key order) -> original execution, flagged as replay
+		String again = id(body(startIdem("ka", "k-1", "idem", "{\"b\":2,\"a\":1}").andExpect(status().isCreated())
+				.andExpect(header().string("Idempotent-Replayed", "true"))));
 		org.junit.jupiter.api.Assertions.assertEquals(first, again);
 		startIdem("ka", "k-1", "idem", "{\"a\":9}").andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("CONFLICT"));
 		// key scope is the tenant: tb can use "k-1" for its own flow
 		activateFlow("kb", "idem");
-		String other = id(body(startIdem("kb", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())));
+		String other = id(body(startIdem("kb", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())
+				.andExpect(header().doesNotExist("Idempotent-Replayed"))));
 		org.junit.jupiter.api.Assertions.assertNotEquals(first, other);
+		// no Idempotency-Key -> never flagged
+		mvc.perform(post("/api/v1/executions").header("X-API-Key", "ka").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"flowKey\":\"idem\",\"userType\":\"PF\",\"context\":\"HTTP\",\"inputData\":{}}"))
+				.andExpect(status().isCreated()).andExpect(header().doesNotExist("Idempotent-Replayed"));
 	}
 
 	@Test
