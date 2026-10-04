@@ -345,8 +345,8 @@
         "Build e testes passam"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Baseline in loadtest/REPORT.md; no volume target assumed. Driver is stdlib Python (no k6/Gatling installed)."
     },
     {
       "id": "US-019",

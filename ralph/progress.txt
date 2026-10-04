@@ -183,3 +183,10 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - Graph-level groups (outside a node) were not implemented; the criterion allows either. Only DECISION nodes resolve groups; transitions can branch on `nodes.<id>.documents`/`groups`.
   - No new endpoint, so no HTTP test; end-to-end test is service-level in ExecutionTest.
 ---
+## 2026-10-03 - US-018
+- loadtest/: `run.sh` (docker Postgres + app with profile `loadtest` + driver, writes results.txt), `load.py` (stdlib Python closed-loop driver), `REPORT.md` (baseline: ~665 req/s plateau, p50/p95/p99 per concurrency, DB stats; not a target). `config/LoadTestConfig` registers fake validator `loadtest-fake` only under profile `loadtest`.
+- **Learnings for future iterations:**
+  - Docker daemon here is a sibling container: published ports are NOT on localhost; reach containers by their IP (run.sh does this).
+  - Don't `pkill -f run.sh` from the shell tool; it kills the tool's own shell.
+  - Throughput saturates ~665/s with DB idle; app-side (8 commits/execution, Hikari pool 10) is the suspect — profile before tuning.
+---
