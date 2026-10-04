@@ -217,7 +217,8 @@ public class ExecutionService {
 	/** Persists the attempt and logs it; payloads only appear in logs masked. */
 	private void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
 			Map<String, Object> output, Map<String, Object> error, Map<String, Object> ctx, Instant started) {
-		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, output, error, ctx, started);
+		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, secrets(output), secrets(error),
+				secrets(ctx), started);
 		MDC.put("nodeId", nodeId);
 		MDC.put("status", status);
 		try {
@@ -248,12 +249,20 @@ public class ExecutionService {
 		return repository.count(tenantId);
 	}
 
+	@SuppressWarnings("unchecked")
+	private static Map<String, Object> secrets(Map<String, Object> m) {
+		return m == null ? null : (Map<String, Object>) LogMasker.maskSecrets(m);
+	}
+
 	private static Map<String, Object> error(String code, String message, boolean retryable) {
 		return Map.of("code", code, "message", message, "retryable", retryable);
 	}
 
 	/** Persists with optimistic locking and returns the instance carrying the new lock version. */
 	private FlowExecution save(FlowExecution ex) {
+		ex = new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
+				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), secrets(ex.contextData()),
+				secrets(ex.result()), ex.errorInfo(), ex.lockVersion(), ex.startedAt(), ex.completedAt());
 		if (!repository.update(ex)) {
 			throw new IllegalStateException("execution " + ex.id() + " was modified concurrently");
 		}

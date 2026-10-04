@@ -136,3 +136,11 @@ Started: Sat Oct  3 19:21:45 -03 2026
   - HTTP tests that need real data: set up via the API itself (POST flows with `displayName` required -> PATCH activate -> POST executions); a START->END flow needs no validator bean.
   - The Postgres container is shared across test classes with the same context config, so list totals can include other tests' rows: assert >= / hasItem, not exact totals.
 ---
+## 2026-10-03 - US-022
+- `LogMasker.maskSecrets` = persistence policy (token/password/secret/authorization/api-key only; CPF/CNPJ/document untouched); `mask` stays the log policy. ExecutionService applies it to node_execution input_snapshot/output_data/error_info and to flow_execution context_data/result (in `save`).
+- Test: ExecutionTest.secretsAreMaskedInPersistedSnapshotsButDocumentsAreKept (real Postgres) + LogMaskerTest.
+- Files: LogMasker, ExecutionService, ExecutionTest, LogMaskerTest, ralph/prd.json
+- **Learnings for future iterations:**
+  - Masking is key-name based only. NOT covered: secrets inside free-text error messages, the TRANSITION_EVALUATED audit `observed` value, and flow_execution.input_data (raw request). Note in story notes.
+  - Masked values replace data, so the returned `result` of POST /executions also shows `***` for credential-named keys.
+---

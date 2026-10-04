@@ -95,6 +95,17 @@ class ExecutionTest {
 		}
 	};
 
+	/** Returns a credential and a CPF in its output, and fails (retryable=false) with one in the message map. */
+	static final ValidatorStrategy LEAKY = new ValidatorStrategy() {
+		public String key() {
+			return "leaky";
+		}
+
+		public ValidationResult execute(ValidationInput in) {
+			return new ValidationResult(true, Map.of("accessToken", "out-secret", "cpf", "111.222.333-44"));
+		}
+	};
+
 	static Map<String, Object> cond(String field, Object value) {
 		return Map.of("operator", "EQUALS", "field", field, "value", value);
 	}
@@ -123,7 +134,7 @@ class ExecutionTest {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		jdbc = new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()));
 		var json = JsonMapper.builder().build();
-		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW));
+		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
 		executions = new ExecutionService(flows, exRepo, registry, meters);
@@ -263,6 +274,27 @@ class ExecutionTest {
 		assertEquals(0L, executions.count("other"));
 		assertTrue(executions.count("t") >= 1);
 		assertTrue(executions.list("t", 0, 1).size() == 1);
+	}
+
+	@Test
+	void secretsAreMaskedInPersistedSnapshotsButDocumentsAreKept() {
+		var g = Map.<String, Object>of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "v"))),
+				"v", Map.of("type", "VALIDATION", "config", Map.of("validatorType", "leaky"), "transitions",
+						List.of(Map.of("to", "e"))),
+				"e", Map.of("type", "END", "config", Map.of())));
+		activate("k-mask", "CM", g, List.of());
+		FlowExecution e = executions.execute("t", "k-mask", "PF", "CM",
+				Map.of("cpf", "999.888.777-66", "password", "in-secret", "apiKey", "k-1"), "corr-m");
+		var rows = jdbc.queryForList("""
+				SELECT input_snapshot::text AS i, output_data::text AS o, error_info::text AS e
+				FROM node_execution WHERE execution_id = ?""", e.id());
+		String all = rows.toString();
+		assertFalse(all.contains("in-secret") || all.contains("out-secret") || all.contains("k-1"), all);
+		assertTrue(all.contains("999.888.777-66") && all.contains("111.222.333-44"), all);
+		String exec = jdbc.queryForObject("SELECT context_data::text || result::text FROM flow_execution WHERE id = ?",
+				String.class, e.id());
+		assertFalse(exec.contains("in-secret") || exec.contains("out-secret"), exec);
 	}
 
 }

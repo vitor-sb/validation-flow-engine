@@ -256,8 +256,8 @@
         "Build e testes passam"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Key-based masking only: free-text error messages, transition audit \"observed\" and flow_execution.input_data are NOT masked."
     },
     {
       "id": "US-023",

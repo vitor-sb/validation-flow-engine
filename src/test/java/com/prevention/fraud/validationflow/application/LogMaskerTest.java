@@ -16,4 +16,10 @@ class LogMaskerTest {
 		assertEquals(Map.of("cpf", "***", "ok", true, "nested", List.of(Map.of("accessToken", "***", "n", 1))), m);
 	}
 
+	@Test
+	void persistencePolicyMasksCredentialsButKeepsDocuments() {
+		assertEquals(Map.of("cpf", "123", "password", "***", "n", List.of(Map.of("authorization", "***"))),
+				LogMasker.maskSecrets(Map.of("cpf", "123", "password", "x", "n", List.of(Map.of("authorization", "y")))));
+	}
+
 }
