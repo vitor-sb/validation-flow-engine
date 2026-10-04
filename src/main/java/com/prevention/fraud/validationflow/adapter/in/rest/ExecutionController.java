@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -50,7 +51,12 @@ class ExecutionController {
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	ExecutionResponse start(@AuthenticationPrincipal TenantPrincipal principal, @Valid @RequestBody StartRequest r) {
+	ExecutionResponse start(@AuthenticationPrincipal TenantPrincipal principal, @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+			@Valid @RequestBody StartRequest r) {
+		if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+			return toResponse(service.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
+					r.context(), r.inputData(), r.correlationId()));
+		}
 		return toResponse(service.execute(principal.tenantId(), r.flowKey(), r.userType(), r.context(),
 				r.inputData(), r.correlationId()));
 	}

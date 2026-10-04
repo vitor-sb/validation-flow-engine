@@ -109,4 +109,61 @@ class ExecutionHttpTest {
 		mvc.perform(get("/api/v1/executions?size=0").header("X-API-Key", "kb")).andExpect(status().isBadRequest());
 	}
 
+	private org.springframework.test.web.servlet.ResultActions startIdem(String apiKey, String idemKey, String flowKey,
+			String input) throws Exception {
+		return mvc.perform(post("/api/v1/executions").header("X-API-Key", apiKey).header("Idempotency-Key", idemKey)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"flowKey\":\"" + flowKey
+						+ "\",\"userType\":\"PF\",\"context\":\"HTTP\",\"inputData\":" + input + "}"));
+	}
+
+	private void activateFlow(String apiKey, String flowKey) throws Exception {
+		String flowId = id(body(mvc.perform(post("/api/v1/flows").header("X-API-Key", apiKey)
+				.contentType(MediaType.APPLICATION_JSON).content(FLOW.formatted(flowKey))).andExpect(status().isCreated())));
+		mvc.perform(patch("/api/v1/flows/" + flowId + "/activate").header("X-API-Key", apiKey)).andExpect(status().isOk());
+	}
+
+	@Test
+	void idempotencyKeyReplaysSamePayloadAndRejectsDifferentOne() throws Exception {
+		activateFlow("ka", "idem");
+		String first = id(body(startIdem("ka", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())));
+		// same payload (different key order) -> original execution
+		String again = id(body(startIdem("ka", "k-1", "idem", "{\"b\":2,\"a\":1}").andExpect(status().isCreated())));
+		org.junit.jupiter.api.Assertions.assertEquals(first, again);
+		startIdem("ka", "k-1", "idem", "{\"a\":9}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("CONFLICT"));
+		// key scope is the tenant: tb can use "k-1" for its own flow
+		activateFlow("kb", "idem");
+		String other = id(body(startIdem("kb", "k-1", "idem", "{\"a\":1,\"b\":2}").andExpect(status().isCreated())));
+		org.junit.jupiter.api.Assertions.assertNotEquals(first, other);
+	}
+
+	@Test
+	void concurrentRequestsWithSameKeyCreateOneExecution() throws Exception {
+		activateFlow("ka", "idem-conc");
+		var pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+		try {
+			var futures = new java.util.ArrayList<java.util.concurrent.Future<String>>();
+			for (int i = 0; i < 8; i++) {
+				futures.add(pool.submit(() -> id(body(startIdem("ka", "k-conc", "idem-conc", "{}")
+						.andExpect(status().isCreated())))));
+			}
+			var ids = new java.util.HashSet<String>();
+			for (var f : futures) {
+				ids.add(f.get());
+			}
+			org.junit.jupiter.api.Assertions.assertEquals(1, ids.size());
+		}
+		finally {
+			pool.shutdownNow();
+		}
+	}
+
+	@Test
+	void rejectedRequestReleasesTheKey() throws Exception {
+		// no active flow -> 404; the key must stay reusable afterwards
+		startIdem("ka", "k-rel", "idem-late", "{}").andExpect(status().isNotFound());
+		activateFlow("ka", "idem-late");
+		startIdem("ka", "k-rel", "idem-late", "{}").andExpect(status().isCreated());
+	}
+
 }

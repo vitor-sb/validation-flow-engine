@@ -150,3 +150,12 @@ Started: Sat Oct  3 19:21:45 -03 2026
 - **Learnings for future iterations:**
   - Interrupt delivery is asynchronous, so the test uses a 0.2s retry delay and polls `running` before asserting. A validator that ignores interruption still keeps running; the contract only asks implementations to honour it.
 ---
+## 2026-10-03 - US-014
+- `POST /executions` accepts optional `Idempotency-Key` (scope = tenant). `ExecutionService.executeIdempotent`: claims (tenant,key) in `idempotency_key` via INSERT ON CONFLICT DO NOTHING; winner runs then stores execution_id; same payload hash -> original execution (loser polls up to 30s while winner runs, then 409); different payload -> 409 CONFLICT; if the winner throws (404/400 etc.) the claim is released so the key is reusable.
+- Request hash = SHA-256 of canonical (key-sorted) flowKey/userType/context/inputData/correlationId.
+- Files: ExecutionService, ExecutionRepository (+IdempotencyClaim), JdbcExecutionRepository, ExecutionController, ExecutionHttpTest (replay, 409, tenant scope, 8-thread concurrency, release-on-failure)
+- **Learnings for future iterations:**
+  - A JVM crash mid-execution leaves a claim with null execution_id that blocks the key (409 after 30s); no expiry/cleanup yet.
+  - Replays return 201 with the original body (no distinct status/header).
+  - Idempotency-Key is not validated for length (column is VARCHAR(255)); a longer key gives a 500.
+---

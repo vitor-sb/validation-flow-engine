@@ -1,7 +1,13 @@
 package com.prevention.fraud.validationflow.application;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HexFormat;
+import java.util.TreeMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +35,8 @@ public class ExecutionService {
 
 	private static final Logger log = LoggerFactory.getLogger(ExecutionService.class);
 
+	private static final Duration IDEMPOTENCY_WAIT = Duration.ofSeconds(30);
+
 	private final FlowService flows;
 
 	private final ExecutionRepository repository;
@@ -50,6 +58,76 @@ public class ExecutionService {
 		this.repository = repository;
 		this.registry = registry;
 		this.meters = meters;
+	}
+
+	/**
+	 * Same as {@link #execute} but deduplicated per (tenant, key): a repeat with the same payload returns the original
+	 * execution, a different payload is a 409, and concurrent calls run the flow once (the loser waits for the winner).
+	 */
+	public FlowExecution executeIdempotent(String tenantId, String key, String flowKey, String userType,
+			String context, Map<String, Object> inputData, String correlationId) {
+		String hash = hash(Arrays.asList(flowKey, userType, context, inputData, correlationId));
+		long deadline = System.nanoTime() + IDEMPOTENCY_WAIT.toNanos();
+		while (true) {
+			if (repository.claimIdempotency(tenantId, key, hash)) {
+				FlowExecution ex;
+				try {
+					ex = execute(tenantId, flowKey, userType, context, inputData, correlationId);
+				}
+				catch (RuntimeException e) {
+					repository.releaseIdempotency(tenantId, key);
+					throw e;
+				}
+				repository.completeIdempotency(tenantId, key, ex.id());
+				return ex;
+			}
+			var claim = repository.findIdempotency(tenantId, key);
+			if (claim.isPresent()) {
+				if (!claim.get().requestHash().equals(hash)) {
+					throw FlowException.conflict("Idempotency-Key was already used with a different payload");
+				}
+				if (claim.get().executionId() != null) {
+					return get(tenantId, claim.get().executionId());
+				}
+			}
+			if (System.nanoTime() > deadline) {
+				throw FlowException.conflict("request with this Idempotency-Key is still in progress");
+			}
+			try {
+				Thread.sleep(50);
+			}
+			catch (InterruptedException ie) {
+				Thread.currentThread().interrupt();
+				throw FlowException.conflict("interrupted while waiting for the request with this Idempotency-Key");
+			}
+		}
+	}
+
+	/** SHA-256 of a canonical rendering (map keys sorted) so key order in the payload doesn't matter. */
+	private static String hash(Object payload) {
+		try {
+			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+					.digest(canonical(payload).getBytes(StandardCharsets.UTF_8)));
+		}
+		catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	private static String canonical(Object o) {
+		if (o instanceof Map<?, ?> m) {
+			var sb = new StringBuilder("{");
+			new TreeMap<String, Object>(m.entrySet().stream()
+					.collect(java.util.stream.Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue)))
+					.forEach((k, v) -> sb.append(k.length()).append(':').append(k).append('=').append(canonical(v)).append(','));
+			return sb.append('}').toString();
+		}
+		if (o instanceof Iterable<?> it) {
+			var sb = new StringBuilder("[");
+			it.forEach(v -> sb.append(canonical(v)).append(','));
+			return sb.append(']').toString();
+		}
+		return o == null ? "null" : o.getClass().getSimpleName() + ":" + o;
 	}
 
 	/** Synchronous: resolves the active flow, validates the input contract, walks the snapshot graph, returns the final state. */

@@ -119,4 +119,29 @@ class JdbcExecutionRepository implements ExecutionRepository {
 				json.writeValueAsString(details));
 	}
 
+	@Override
+	public boolean claimIdempotency(String tenantId, String key, String requestHash) {
+		return jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash) VALUES (?, ?, ?) "
+				+ "ON CONFLICT DO NOTHING", tenantId, key, requestHash) == 1;
+	}
+
+	@Override
+	public Optional<IdempotencyClaim> findIdempotency(String tenantId, String key) {
+		return jdbc.query("SELECT request_hash, execution_id FROM idempotency_key WHERE tenant_id = ? AND idempotency_key = ?",
+				(rs, n) -> new IdempotencyClaim(rs.getString(1), rs.getObject(2, UUID.class)), tenantId, key).stream()
+				.findFirst();
+	}
+
+	@Override
+	public void completeIdempotency(String tenantId, String key, UUID executionId) {
+		jdbc.update("UPDATE idempotency_key SET execution_id = ? WHERE tenant_id = ? AND idempotency_key = ?",
+				executionId, tenantId, key);
+	}
+
+	@Override
+	public void releaseIdempotency(String tenantId, String key) {
+		jdbc.update("DELETE FROM idempotency_key WHERE tenant_id = ? AND idempotency_key = ? AND execution_id IS NULL",
+				tenantId, key);
+	}
+
 }
