@@ -16,7 +16,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -53,15 +55,19 @@ public class ExecutionService {
 
 	private final Duration idempotencyLease;
 
-	// only used when a node has config.timeout; daemon threads so a hung validator never blocks shutdown
-	private final ExecutorService timeoutPool = Executors.newCachedThreadPool(r -> {
-		Thread t = new Thread(r, "validator-timeout");
-		t.setDaemon(true);
-		return t;
-	});
+	// only used when a node has config.timeout. Bounded: a validator that ignores interrupt keeps its thread, so
+	// without a cap hung validators could exhaust the JVM. Daemon threads so they never block shutdown.
+	private final ThreadPoolExecutor timeoutPool;
 
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
-			MeterRegistry meters, Duration idempotencyLease) {
+			MeterRegistry meters, Duration idempotencyLease, int maxThreads, int queueCapacity) {
+		this.timeoutPool = new ThreadPoolExecutor(maxThreads, maxThreads, 60, TimeUnit.SECONDS,
+				new ArrayBlockingQueue<>(queueCapacity), r -> {
+					Thread t = new Thread(r, "validator-timeout");
+					t.setDaemon(true);
+					return t;
+				});
+		timeoutPool.allowCoreThreadTimeOut(true);
 		this.idempotencyLease = idempotencyLease;
 		this.flows = flows;
 		this.repository = repository;
@@ -403,7 +409,14 @@ public class ExecutionService {
 		if (timeout == null) {
 			return v.execute(input);
 		}
-		var f = timeoutPool.submit(() -> v.execute(input));
+		java.util.concurrent.Future<ValidatorStrategy.ValidationResult> f;
+		try {
+			f = timeoutPool.submit(() -> v.execute(input));
+		}
+		catch (RejectedExecutionException e) {
+			meters.counter("validation.node.rejected", "validator", v.key()).increment();
+			throw new ValidatorException("NODE_REJECTED", "validator capacity exhausted, try again later", true);
+		}
 		try {
 			return f.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
 		}

@@ -182,7 +182,7 @@ class ExecutionTest {
 				leakingFailure("leak-domain", true), leakingFailure("leak-runtime", false)));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
-		executions = new ExecutionService(flows, exRepo, registry, meters, java.time.Duration.ofHours(1));
+		executions = new ExecutionService(flows, exRepo, registry, meters, java.time.Duration.ofHours(1), 64, 64);
 	}
 
 	static UUID activate(String key, String ctx, Map<String, Object> g, List<InputField> contract) {
@@ -359,6 +359,53 @@ class ExecutionTest {
 		}
 		assertEquals(0, running.get());
 		assertEquals(2, interrupted.get());
+	}
+
+	@Test
+	void saturatedTimeoutPoolRejectsInsteadOfGrowing() {
+		var release = new java.util.concurrent.CountDownLatch(1);
+		var stubborn = new ValidatorStrategy() {
+			public String key() {
+				return "stubborn";
+			}
+
+			public ValidationResult execute(ValidationInput in) {
+				while (true) { // ignores interrupt until released
+					try {
+						if (release.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
+							return new ValidationResult(true, Map.of());
+						}
+					}
+					catch (InterruptedException ignored) {
+					}
+				}
+			}
+		};
+		var registry = new ValidatorRegistry(List.of(stubborn));
+		var ownFlows = new FlowService(new JdbcFlowRepository(jdbc, JsonMapper.builder().build()),
+				new GraphValidator(registry::contains));
+		var small = new ExecutionService(ownFlows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
+				registry, meters, java.time.Duration.ofHours(1), 2, 1);
+		var g = singleNodeGraph("stubborn", Map.of("timeout", "PT0.05S"));
+		ownFlows.activate("t", ownFlows.createDraft("t", "t", new FlowService.CreateFlow("k-stub", "PF", "CSTUB", "d", null,
+				g, List.of(), null)).id());
+		try {
+			var codes = new java.util.ArrayList<Object>();
+			long before = Thread.getAllStackTraces().keySet().stream()
+					.filter(th -> th.getName().equals("validator-timeout")).count(); // other tests' pool
+			for (int i = 0; i < 6; i++) {
+				codes.add(small.execute("t", null, "PF", "CSTUB", Map.of(), null).errorInfo().get("code"));
+				long threads = Thread.getAllStackTraces().keySet().stream()
+						.filter(th -> th.getName().equals("validator-timeout")).count();
+				assertTrue(threads <= before + 2, "threads=" + threads);
+			}
+			assertEquals(List.of("NODE_TIMEOUT", "NODE_TIMEOUT", "NODE_TIMEOUT", "NODE_REJECTED", "NODE_REJECTED",
+					"NODE_REJECTED"), codes);
+			assertEquals(3.0, meters.counter("validation.node.rejected", "validator", "stubborn").count());
+		}
+		finally {
+			release.countDown();
+		}
 	}
 
 	@Test
