@@ -28,10 +28,18 @@ public class FlowService {
 
 	// ponytail: version = max+1 read then insert; a concurrent create of the same key hits the unique constraint (409 via RestExceptionHandler). Retry server-side if clients need it hidden.
 	public FlowDefinition createDraft(String tenantId, String createdBy, CreateFlow c) {
+		rejectOversized(c);
 		return repository.save(new FlowDefinition(UUID.randomUUID(), tenantId, c.flowKey(),
 				repository.nextVersion(tenantId, c.flowKey()), FlowStatus.DRAFT, c.userType(), c.context(),
 				c.displayName(), c.description(), c.graphDefinition(), c.inputContract(), c.metadata(),
 				createdBy, Instant.now()));
+	}
+
+	private void rejectOversized(CreateFlow c) {
+		List<GraphValidator.GraphError> errors = graphValidator.checkSize(c.graphDefinition());
+		if (!errors.isEmpty()) {
+			throw FlowException.invalid(errors);
+		}
 	}
 
 	public FlowDefinition get(String tenantId, UUID id) {
@@ -58,6 +66,7 @@ public class FlowService {
 
 	/** DRAFT is edited in place; ACTIVE spawns a new DRAFT version; ARCHIVED is immutable. flowKey comes from the stored flow. */
 	public FlowDefinition update(String tenantId, String updatedBy, UUID id, CreateFlow c) {
+		rejectOversized(c);
 		FlowDefinition f = get(tenantId, id);
 		CreateFlow withKey = new CreateFlow(f.flowKey(), c.userType(), c.context(), c.displayName(),
 				c.description(), c.graphDefinition(), c.inputContract(), c.metadata());

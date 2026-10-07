@@ -36,6 +36,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 @RestController
 @RequestMapping("/api/v1/executions")
@@ -45,7 +46,7 @@ class ExecutionController {
 	record StartRequest(@NotBlank @Schema(example = "PF") String userType, @NotBlank @Schema(example = "ONBOARDING") String context,
 			@NotNull @Schema(description = "Dynamic input, validated against the flow's inputContract", example = "{\"cpf\":\"12345678900\"}") Map<String, Object> inputData,
 			@Schema(description = "Optional: pick the ACTIVE flow by key instead of userType+context", example = "onboarding") String flowKey,
-			@Schema(example = "req-123") String correlationId) {
+			@Size(max = 128) @Schema(example = "req-123") String correlationId) {
 	}
 
 	record ExecutionResponse(UUID executionId, @Schema(example = "onboarding") String flowKey, @Schema(example = "1") int flowVersion,

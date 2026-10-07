@@ -17,8 +17,10 @@ class SecurityConfig {
 
 	// Health is public; everything else needs a valid API key (401) with the right scope (403).
 	@Bean
-	SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyProperties properties) throws Exception {
+	SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyProperties properties,
+			@org.springframework.beans.factory.annotation.Value("${app.limits.max-body-bytes:1048576}") long maxBodyBytes) throws Exception {
 		return http
+				.addFilterBefore(new BodySizeLimitFilter(maxBodyBytes), org.springframework.security.web.session.DisableEncodeUrlFilter.class)
 				.csrf(csrf -> csrf.disable())
 				.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.addFilterBefore(new ApiKeyAuthenticationFilter(properties), AnonymousAuthenticationFilter.class)

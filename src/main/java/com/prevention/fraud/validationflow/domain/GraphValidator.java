@@ -25,13 +25,39 @@ public class GraphValidator {
 	private static final Set<String> COMPARISONS = Set.of("EQUALS", "NOT_EQUALS", "GREATER_THAN",
 			"GREATER_THAN_OR_EQUALS", "LESS_THAN", "LESS_THAN_OR_EQUALS", "CONTAINS", "IN", "EXISTS");
 
+	public static final int DEFAULT_MAX_NODES = 200;
+	public static final int DEFAULT_MAX_TRANSITIONS = 1000;
+
 	private final Predicate<String> validatorExists;
+	private final int maxNodes;
+	private final int maxTransitions;
 
 	public GraphValidator(Predicate<String> validatorExists) {
+		this(validatorExists, DEFAULT_MAX_NODES, DEFAULT_MAX_TRANSITIONS);
+	}
+
+	public GraphValidator(Predicate<String> validatorExists, int maxNodes, int maxTransitions) {
 		this.validatorExists = validatorExists;
+		this.maxNodes = maxNodes;
+		this.maxTransitions = maxTransitions;
+	}
+
+	/** Size limits only (cheap); also used on create/update, where drafts may still be structurally invalid. */
+	public List<GraphError> checkSize(Map<String, Object> graph) {
+		Map<String, Map<String, Object>> nodes = nodes(graph);
+		long transitions = nodes.values().stream().mapToLong(n -> list(n.get("transitions")).size()).sum();
+		if (nodes.size() > maxNodes || transitions > maxTransitions) {
+			return List.of(err("GRAPH_TOO_LARGE", null, "graph has " + nodes.size() + " nodes and " + transitions
+					+ " transitions; limits are " + maxNodes + " and " + maxTransitions));
+		}
+		return List.of();
 	}
 
 	public List<GraphError> validate(Map<String, Object> graph) {
+		List<GraphError> tooLarge = checkSize(graph);
+		if (!tooLarge.isEmpty()) {
+			return tooLarge; // don't walk an oversized graph
+		}
 		List<GraphError> errors = new ArrayList<>();
 		Map<String, Map<String, Object>> nodes = nodes(graph);
 		Object start = graph == null ? null : graph.get("startNodeId");

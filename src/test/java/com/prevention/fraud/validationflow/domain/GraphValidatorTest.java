@@ -181,4 +181,15 @@ class GraphValidatorTest {
 		((Map<String, Object>) nodes(g).get("start")).put("transitions", List.of(Map.of("to", "check"), Map.of("to", to)));
 	}
 
+
+	@Test
+	void graphAboveNodeOrTransitionLimitIsTooLarge() {
+		var small = new GraphValidator("doc-check"::equals, 3, 2);
+		assertTrue(small.validate(valid()).isEmpty());
+		Map<String, Object> g = valid();
+		nodes(g).put("extra", node("END", Map.of()));
+		assertEquals("GRAPH_TOO_LARGE", small.validate(g).get(0).code());
+		assertEquals("GRAPH_TOO_LARGE", new GraphValidator("doc-check"::equals, 10, 1).validate(valid()).get(0).code());
+	}
+
 }

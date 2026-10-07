@@ -813,6 +813,8 @@ components:
         correlationId:
           type: string
           example: req-123
+          maxLength: 128
+          minLength: 0
         flowKey:
           type: string
           description: "Optional: pick the ACTIVE flow by key instead of userType+context"
