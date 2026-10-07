@@ -47,6 +47,9 @@ public interface ExecutionRepository {
 	/** Recovery only: deletes claims with no execution whose lease expired, across tenants; returns how many. */
 	int deleteExpiredOrphanIdempotency();
 
+	/** Retention only: deletes claims created before the cutoff, across tenants, except live reservations (no execution, lease still valid); returns how many. */
+	int deleteIdempotencyCreatedBefore(java.time.Instant cutoff);
+
 	record IdempotencyClaim(String requestHash, UUID executionId) {
 	}
 

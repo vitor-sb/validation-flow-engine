@@ -65,7 +65,7 @@ class ExecutionController {
 	}
 
 	@PostMapping
-	@Operation(summary = "Start an execution", description = "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped to the tenant) a replay with the same payload returns the original execution, flagged with `Idempotent-Replayed: true`; a different payload returns 409.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:execute"))
+	@Operation(summary = "Start an execution", description = "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped to the tenant) a replay with the same payload returns the original execution, flagged with `Idempotent-Replayed: true`; a different payload returns 409. Keys are retained for a limited window (`app.retention.idempotency`); a replay after it runs the flow again.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:execute"))
 	@ApiResponse(responseCode = "201", description = "Execution created or replayed", headers = @Header(name = "Idempotent-Replayed", description = "`true` only when the response replays an earlier call with the same `Idempotency-Key`", schema = @Schema(type = "string", allowableValues = "true")))
 	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")

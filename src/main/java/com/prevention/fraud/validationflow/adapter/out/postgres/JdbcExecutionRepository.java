@@ -163,4 +163,10 @@ class JdbcExecutionRepository implements ExecutionRepository {
 		return jdbc.update("DELETE FROM idempotency_key WHERE execution_id IS NULL AND locked_until < now()");
 	}
 
+	@Override
+	public int deleteIdempotencyCreatedBefore(java.time.Instant cutoff) {
+		return jdbc.update("DELETE FROM idempotency_key WHERE created_at < ? "
+				+ "AND NOT (execution_id IS NULL AND locked_until > now())", java.sql.Timestamp.from(cutoff));
+	}
+
 }

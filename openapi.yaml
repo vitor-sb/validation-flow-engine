@@ -63,7 +63,9 @@ paths:
     post:
       description: "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped\
         \ to the tenant) a replay with the same payload returns the original execution,\
-        \ flagged with `Idempotent-Replayed: true`; a different payload returns 409."
+        \ flagged with `Idempotent-Replayed: true`; a different payload returns 409.\
+        \ Keys are retained for a limited window (`app.retention.idempotency`); a\
+        \ replay after it runs the flow again."
       operationId: start
       parameters:
       - description: "Optional idempotency key (max 255 chars of [A-Za-z0-9._:-])"

@@ -45,6 +45,9 @@ class ExecutionHttpTest {
 	@Autowired
 	org.springframework.jdbc.core.JdbcTemplate jdbc;
 
+	@Autowired
+	com.prevention.fraud.validationflow.application.ExecutionRepository repo;
+
 	private String body(org.springframework.test.web.servlet.ResultActions r) throws Exception {
 		return r.andReturn().getResponse().getContentAsString();
 	}
@@ -203,6 +206,34 @@ class ExecutionHttpTest {
 		startIdem("ka", "live", "lease", "{}").andExpect(status().isConflict());
 		org.junit.jupiter.api.Assertions.assertEquals("x", jdbc.queryForObject(
 				"SELECT request_hash FROM idempotency_key WHERE tenant_id='ta' AND idempotency_key='live'", String.class));
+	}
+
+	@Test
+	void retentionPurgesOldKeysKeepsLiveReservationsAndReplayRunsAgain() throws Exception {
+		activateFlow("ka", "ret");
+		startIdem("ka", "ret-1", "ret", "{}").andExpect(status().isCreated());
+		startIdem("ka", "ret-1", "ret", "{}").andExpect(header().string("Idempotent-Replayed", "true"));
+		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, created_at, locked_until) VALUES "
+				+ "('ta', 'ret-live', 'x', now() - interval '2 days', now() + interval '1 hour'), "
+				+ "('ta', 'ret-orphan', 'x', now() - interval '2 days', now() - interval '1 minute')");
+
+		// recent keys survive
+		new com.prevention.fraud.validationflow.application.IdempotencyRetentionService(repo, java.time.Duration.ofDays(1)).purge();
+		org.junit.jupiter.api.Assertions.assertEquals(1, count("ret-1"));
+
+		// everything older than "now" goes, except the live reservation
+		new com.prevention.fraud.validationflow.application.IdempotencyRetentionService(repo, java.time.Duration.ZERO).purge();
+		org.junit.jupiter.api.Assertions.assertEquals(0, count("ret-1"));
+		org.junit.jupiter.api.Assertions.assertEquals(0, count("ret-orphan"));
+		org.junit.jupiter.api.Assertions.assertEquals(1, count("ret-live"));
+
+		// replay after retention executes the flow again (no replay header)
+		startIdem("ka", "ret-1", "ret", "{}").andExpect(status().isCreated())
+				.andExpect(header().doesNotExist("Idempotent-Replayed"));
+	}
+
+	private int count(String key) {
+		return jdbc.queryForObject("SELECT count(*) FROM idempotency_key WHERE idempotency_key = ?", Integer.class, key);
 	}
 
 }
