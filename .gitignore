@@ -32,3 +32,10 @@ build/
 ### VS Code ###
 .vscode/
 loadtest/app.log
+
+# IA / Ralph: estado local (ralph.sh, prompts e tasks/ são versionados)
+.claude/
+scripts/ralph/prd.json
+scripts/ralph/progress.txt
+scripts/ralph/.last-branch
+scripts/ralph/archive/

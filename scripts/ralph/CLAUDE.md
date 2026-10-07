@@ -4,7 +4,7 @@ You are an autonomous coding agent working on a software project.
 
 ## Your Task
 
-1. Read the PRD at `prd.json` (in the same directory as this file)
+1. Read the PRD at `prd.json` (in the same directory as this file) and its `globalRules`
 2. Read the progress log at `progress.txt` (check Codebase Patterns section first)
 3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
 4. Pick the **highest priority** user story where `passes: false`
@@ -107,8 +107,7 @@ NEVER write the completion tag in any other context — not to say it doesn't ap
 - Commit frequently
 - Keep CI green
 - Read the Codebase Patterns section in progress.txt before starting
-- Every error response must use `ErrorResponse`, including framework errors (invalid enum/query params, malformed JSON, type mismatches). Never let Spring's default error body leak.
-- Every new REST endpoint needs at least one HTTP-level test, including tenant isolation (another tenant's id returns 404).
+- Read `globalRules` in `prd.json` before starting: they are project-specific rules that apply to EVERY story. Respect them and re-check them before committing.
 - Always re-run the full test suite after your LAST change, before committing.
 - Never loosen validation, skip a check, or mock a component just to make a story pass. If a story depends on something that doesn't exist yet, record it in progress.txt and in the story notes instead of working around it.
 - Credentials (tokens, passwords, secrets, API keys) must never be persisted or logged in plain text.
