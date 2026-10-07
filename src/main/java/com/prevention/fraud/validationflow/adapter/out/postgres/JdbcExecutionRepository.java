@@ -152,4 +152,15 @@ class JdbcExecutionRepository implements ExecutionRepository {
 				tenantId, key);
 	}
 
+	@Override
+	public List<FlowExecution> findRunningStartedBefore(java.time.Instant cutoff) {
+		return jdbc.query("SELECT * FROM flow_execution WHERE status = 'RUNNING' AND started_at < ?", (rs, n) -> read(rs),
+				Timestamp.from(cutoff));
+	}
+
+	@Override
+	public int deleteExpiredOrphanIdempotency() {
+		return jdbc.update("DELETE FROM idempotency_key WHERE execution_id IS NULL AND locked_until < now()");
+	}
+
 }

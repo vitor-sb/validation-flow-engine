@@ -507,4 +507,50 @@ class ExecutionTest {
 		assertEquals(List.of(true, false), ((List<?>) out2.get("groups")).stream().map(x -> ((Map<?, ?>) x).get("selected")).toList());
 	}
 
+	@Test
+	void recoveryFailsStaleRunningAcrossTenantsAndDropsOrphanClaims() {
+		var repo = new JdbcExecutionRepository(jdbc, JsonMapper.builder().build());
+		var flowT = flows.get("t", activate("rec-t", "CR-t", graph(true, "x"), List.of()));
+		var du = flows.createDraft("u", "u", new FlowService.CreateFlow("rec-u", "PF", "CR-u", "d", null,
+				graph(true, "x"), List.of(), null));
+		flows.activate("u", du.id());
+		var flowU = flows.get("u", du.id());
+		var old = java.time.Instant.now().minus(java.time.Duration.ofHours(3));
+		FlowExecution staleT = running("t", flowT, old), staleU = running("u", flowU, old),
+				fresh = running("t", flowT, java.time.Instant.now());
+		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
+				+ "VALUES ('t', 'orphan-old', 'h', now() - interval '1 minute'), ('t', 'orphan-live', 'h', now() + interval '1 hour')");
+
+		assertEquals(2, new com.prevention.fraud.validationflow.application.RecoveryService(repo,
+				java.time.Duration.ofHours(1)).recover());
+
+		for (var ex : List.of(staleT, staleU)) {
+			var got = executions.get(ex.tenantId(), ex.id());
+			assertEquals(ExecutionStatus.FAILED, got.status());
+			assertEquals("EXECUTION_ABANDONED", got.errorInfo().get("code"));
+			assertTrue(got.completedAt() != null);
+			assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM execution_audit_log WHERE tenant_id = ? "
+					+ "AND execution_id = ? AND event_type = 'EXECUTION_ABANDONED'", Integer.class, ex.tenantId(), ex.id()));
+		}
+		assertEquals(ExecutionStatus.RUNNING, executions.get("t", fresh.id()).status());
+		assertThrows(FlowException.class, () -> executions.get("t", staleU.id())); // no cross-tenant leak
+		assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM idempotency_key WHERE idempotency_key = 'orphan-old'", Integer.class));
+		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM idempotency_key WHERE idempotency_key = 'orphan-live'", Integer.class));
+
+		// an execution finished meanwhile is not overwritten: the stale read loses on lock_version
+		FlowExecution late = running("t", flowT, old);
+		jdbc.update("UPDATE flow_execution SET status = 'COMPLETED', lock_version = 1 WHERE id = ?", late.id());
+		assertFalse(repo.update(late.fail(Map.of(), "X", "x")));
+		assertEquals(ExecutionStatus.COMPLETED, executions.get("t", late.id()).status());
+	}
+
+	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.FlowDefinition flow,
+			java.time.Instant startedAt) {
+		var p = FlowExecution.pending(tenant, flow, null, Map.of());
+		var r = new FlowExecution(p.id(), tenant, p.flowDefinitionId(), p.flowKey(), p.flowVersion(), p.snapshot(), null,
+				ExecutionStatus.RUNNING, Map.of(), Map.of(), null, null, 0, startedAt, null, null, null);
+		new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()).insert(r);
+		return r;
+	}
+
 }

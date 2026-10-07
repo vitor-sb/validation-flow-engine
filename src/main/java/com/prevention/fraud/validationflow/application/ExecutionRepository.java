@@ -41,6 +41,12 @@ public interface ExecutionRepository {
 	/** Drops a claim whose execution never started (e.g. rejected input), so the key can be reused. */
 	void releaseIdempotency(String tenantId, String key);
 
+	/** Recovery only: RUNNING executions of ALL tenants that started before the cutoff. */
+	java.util.List<FlowExecution> findRunningStartedBefore(java.time.Instant cutoff);
+
+	/** Recovery only: deletes claims with no execution whose lease expired, across tenants; returns how many. */
+	int deleteExpiredOrphanIdempotency();
+
 	record IdempotencyClaim(String requestHash, UUID executionId) {
 	}
 
