@@ -39,8 +39,11 @@ class FlowConfig {
 	@Bean
 	GraphValidator graphValidator(ValidatorRegistry registry,
 			@org.springframework.beans.factory.annotation.Value("${app.limits.max-nodes:" + GraphValidator.DEFAULT_MAX_NODES + "}") int maxNodes,
-			@org.springframework.beans.factory.annotation.Value("${app.limits.max-transitions:" + GraphValidator.DEFAULT_MAX_TRANSITIONS + "}") int maxTransitions) {
-		return new GraphValidator(registry::contains, maxNodes, maxTransitions);
+			@org.springframework.beans.factory.annotation.Value("${app.limits.max-transitions:" + GraphValidator.DEFAULT_MAX_TRANSITIONS + "}") int maxTransitions,
+			@org.springframework.beans.factory.annotation.Value("${app.limits.max-attempts:" + GraphValidator.DEFAULT_MAX_ATTEMPTS + "}") int maxAttempts,
+			@org.springframework.beans.factory.annotation.Value("${app.limits.max-delay:PT1M}") java.time.Duration maxDelay,
+			@org.springframework.beans.factory.annotation.Value("${app.limits.max-timeout:PT5M}") java.time.Duration maxTimeout) {
+		return new GraphValidator(registry::contains, maxNodes, maxTransitions, maxAttempts, maxDelay, maxTimeout);
 	}
 
 }

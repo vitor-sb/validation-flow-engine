@@ -25,6 +25,7 @@ import java.util.concurrent.TimeoutException;
 import com.prevention.fraud.validationflow.domain.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.GraphValidator;
 import com.prevention.fraud.validationflow.domain.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.FlowExecution;
 import com.prevention.fraud.validationflow.domain.GraphValidator;
@@ -392,7 +393,9 @@ public class ExecutionService {
 				return new Attempt(null, error, attempt);
 			}
 			meters.counter("validation.node.retry", "validator", v.key()).increment();
-			long ms = delay.toMillis() * (exponential ? 1L << (attempt - 1) : 1L);
+			// exponent capped so the shift/multiply can't overflow; sleep never exceeds the validator's max delay
+			long ms = Math.min(delay.toMillis() * (exponential ? 1L << Math.min(attempt - 1, 20) : 1L),
+					GraphValidator.DEFAULT_MAX_DELAY.toMillis());
 			try {
 				Thread.sleep(ms);
 			}

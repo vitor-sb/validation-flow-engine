@@ -27,19 +27,33 @@ public class GraphValidator {
 
 	public static final int DEFAULT_MAX_NODES = 200;
 	public static final int DEFAULT_MAX_TRANSITIONS = 1000;
+	public static final int DEFAULT_MAX_ATTEMPTS = 10;
+	public static final Duration DEFAULT_MAX_DELAY = Duration.ofMinutes(1);
+	public static final Duration DEFAULT_MAX_TIMEOUT = Duration.ofMinutes(5);
 
 	private final Predicate<String> validatorExists;
 	private final int maxNodes;
 	private final int maxTransitions;
+	private final int maxAttempts;
+	private final Duration maxDelay;
+	private final Duration maxTimeout;
 
 	public GraphValidator(Predicate<String> validatorExists) {
 		this(validatorExists, DEFAULT_MAX_NODES, DEFAULT_MAX_TRANSITIONS);
 	}
 
 	public GraphValidator(Predicate<String> validatorExists, int maxNodes, int maxTransitions) {
+		this(validatorExists, maxNodes, maxTransitions, DEFAULT_MAX_ATTEMPTS, DEFAULT_MAX_DELAY, DEFAULT_MAX_TIMEOUT);
+	}
+
+	public GraphValidator(Predicate<String> validatorExists, int maxNodes, int maxTransitions, int maxAttempts,
+			Duration maxDelay, Duration maxTimeout) {
 		this.validatorExists = validatorExists;
 		this.maxNodes = maxNodes;
 		this.maxTransitions = maxTransitions;
+		this.maxAttempts = maxAttempts;
+		this.maxDelay = maxDelay;
+		this.maxTimeout = maxTimeout;
 	}
 
 	/** Size limits only (cheap); also used on create/update, where drafts may still be structurally invalid. */
@@ -119,12 +133,13 @@ public class GraphValidator {
 		}
 		if (config.containsKey("timeout")) {
 			try {
-				if (!(config.get("timeout") instanceof String t) || Duration.parse(t).compareTo(Duration.ZERO) <= 0) {
+				if (!(config.get("timeout") instanceof String t) || Duration.parse(t).compareTo(Duration.ZERO) <= 0
+						|| Duration.parse(t).compareTo(maxTimeout) > 0) {
 					throw new IllegalArgumentException();
 				}
 			}
 			catch (RuntimeException e) {
-				errors.add(err("INVALID_TIMEOUT", id, "timeout must be a positive ISO-8601 duration"));
+				errors.add(err("INVALID_TIMEOUT", id, "timeout must be a positive ISO-8601 duration of at most " + maxTimeout));
 			}
 		}
 		Object groups = map(config.get("params")).get("documentGroups");
@@ -134,9 +149,11 @@ public class GraphValidator {
 		}
 		if (config.containsKey("retryPolicy")) {
 			Map<String, Object> rp = map(config.get("retryPolicy"));
-			if (!(rp.get("maxAttempts") instanceof Integer n) || n < 1
-					|| (rp.containsKey("backoff") && !Set.of("FIXED", "EXPONENTIAL").contains(rp.get("backoff")))) {
-				errors.add(err("INVALID_RETRY_POLICY", id, "maxAttempts must be >= 1 and backoff FIXED or EXPONENTIAL"));
+			if (!(rp.get("maxAttempts") instanceof Integer n) || n < 1 || n > maxAttempts
+					|| (rp.containsKey("backoff") && !Set.of("FIXED", "EXPONENTIAL").contains(rp.get("backoff")))
+					|| (rp.containsKey("delay") && !validDelay(rp.get("delay")))) {
+				errors.add(err("INVALID_RETRY_POLICY", id, "maxAttempts must be 1.." + maxAttempts
+						+ ", backoff FIXED or EXPONENTIAL, delay an ISO-8601 duration of 0.." + maxDelay));
 			}
 		}
 		if ("SUB_FLOW".equals(type)) {
@@ -155,6 +172,16 @@ public class GraphValidator {
 			if (depth != null && (!(depth instanceof Integer d) || d < 1 || d > MAX_SUB_FLOW_DEPTH)) {
 				errors.add(err("SUB_FLOW_DEPTH_EXCEEDED", id, "maxDepth must be 1.." + MAX_SUB_FLOW_DEPTH));
 			}
+		}
+	}
+
+	private boolean validDelay(Object d) {
+		try {
+			Duration v = Duration.parse((String) d);
+			return !v.isNegative() && v.compareTo(maxDelay) <= 0;
+		}
+		catch (RuntimeException e) {
+			return false;
 		}
 	}
 

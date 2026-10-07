@@ -104,6 +104,20 @@ class GraphValidatorTest {
 	}
 
 	@Test
+	void retryAndTimeoutLimits() {
+		expect("INVALID_RETRY_POLICY", g -> cfg(g, "check").put("retryPolicy", Map.of("maxAttempts", 2_000_000_000)));
+		expect("INVALID_RETRY_POLICY",
+				g -> cfg(g, "check").put("retryPolicy", Map.of("maxAttempts", 70, "backoff", "EXPONENTIAL")));
+		expect("INVALID_RETRY_POLICY",
+				g -> cfg(g, "check").put("retryPolicy", Map.of("maxAttempts", 2, "delay", "PT24H")));
+		expect("INVALID_RETRY_POLICY", g -> cfg(g, "check").put("retryPolicy", Map.of("maxAttempts", 2, "delay", "abc")));
+		expect("INVALID_RETRY_POLICY", g -> cfg(g, "check").put("retryPolicy", Map.of("maxAttempts", 2, "delay", "PT-1S")));
+		expect("INVALID_TIMEOUT", g -> cfg(g, "check").put("timeout", "PT1H"));
+		assertEquals(List.of(), okWith(c -> c.put("retryPolicy", Map.of("maxAttempts", 10, "delay", "PT1M"))));
+		assertEquals(List.of(), okWith(c -> c.put("timeout", "PT5M")));
+	}
+
+	@Test
 	void invalidCondition() {
 		for (Object bad : List.of(Map.of("operator", "LIKE", "field", "a", "value", 1),
 				Map.of("operator", "EQUALS", "value", 1), Map.of("operator", "IN", "field", "a", "value", "x"),
