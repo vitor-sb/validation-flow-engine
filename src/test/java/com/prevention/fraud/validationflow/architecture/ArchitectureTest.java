@@ -69,6 +69,11 @@ class ArchitectureTest {
 			.allowEmptyShould(true);
 
 	@ArchTest
+	static final ArchRule persistenceApiStaysInPostgresAdapter = noClasses().that().resideOutsideOfPackage(BASE + ".adapter.out.postgres..")
+			.should().dependOnClassesThat().resideInAnyPackage("jakarta.persistence..", "org.springframework.data..")
+			.allowEmptyShould(true);
+
+	@ArchTest
 	static final ArchRule portsAreInterfaces = classes().that().resideInAPackage(BASE + ".application..ports")
 			.and().areTopLevelClasses().and().haveSimpleNameNotEndingWith("package-info")
 			.should().beInterfaces();

@@ -29,3 +29,12 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 fork/join, ASYNC_VALIDATION, EXTERNAL_CALL, callbacks/polling, retomada (`/resume`), dead-letter,
 HUMAN_APPROVAL, cache de provedores, particionamento, broker, réplicas de leitura, projeções,
 aprovação em dois níveis para ativação.
+
+## Persistência: decisões da migração JDBC → JPA
+
+- **Mapeamento JSON:** `@JdbcTypeCode(SqlTypes.JSON)` nativo do Hibernate (Jackson 3 funciona); sem `AttributeConverter`. JSON nulo vira SQL NULL (antes, literal jsonb `null`); a leitura de domínio é idêntica.
+- **Tradução de exceções:** violação de unique chega como `DataIntegrityViolationException`; `RestExceptionHandler` devolve 409 só quando SQLState 23505 está na cadeia, senão 500. `DuplicateKeyException` segue mapeada para 409.
+- **Persistable:** entidades com id gerado pela aplicação estendem `AssignedIdEntity` (`Persistable<UUID>`), evitando SELECT antes do INSERT. `IdempotencyKeyEntity` usa `@EmbeddedId` e nunca é salva via `save`.
+- **Lock otimista:** `flow_execution.update` continua `@Modifying` com `WHERE lock_version = ?`, sem `@Version`.
+- **Idempotência:** o claim atômico permanece em SQL nativo (`INSERT ... ON CONFLICT DO UPDATE ... WHERE`).
+- **Arquitetura:** regra ArchUnit restringe `jakarta.persistence` e `org.springframework.data` a `adapter.out.postgres`.

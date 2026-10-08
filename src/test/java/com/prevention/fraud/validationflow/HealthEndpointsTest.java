@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
 				+ "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
+				+ "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration,"
 				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"
 })
 @AutoConfigureMockMvc
