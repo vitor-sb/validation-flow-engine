@@ -7,6 +7,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -16,7 +18,7 @@ final class JpaTestContext {
 
 	@org.springframework.boot.test.context.TestConfiguration
 	@EnableAutoConfiguration
-	@Import(JpaFlowRepository.class)
+	@Import({ JpaFlowRepository.class, JpaExecutionRepository.class, JdbcIdempotencyRepository.class })
 	static class Config {
 
 		@org.springframework.context.annotation.Bean
@@ -39,6 +41,14 @@ final class JpaTestContext {
 
 	static FlowRepository flowRepository(ConfigurableApplicationContext ctx) {
 		return ctx.getBean(FlowRepository.class);
+	}
+
+	static ExecutionRepository executionRepository(ConfigurableApplicationContext ctx) {
+		return ctx.getBean(ExecutionRepository.class);
+	}
+
+	static IdempotencyRepository idempotencyRepository(ConfigurableApplicationContext ctx) {
+		return ctx.getBean(IdempotencyRepository.class);
 	}
 
 }

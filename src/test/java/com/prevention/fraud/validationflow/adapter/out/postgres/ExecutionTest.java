@@ -44,6 +44,10 @@ class ExecutionTest {
 
 	static JdbcTemplate jdbc;
 
+	static com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository exRepo;
+
+	static com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idemRepo;
+
 	static com.prevention.fraud.validationflow.application.flow.ports.FlowRepository flowRepo;
 
 	static FlowService flows;
@@ -183,12 +187,13 @@ class ExecutionTest {
 	static void setUp() {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		jdbc = new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()));
-		var json = JsonMapper.builder().build();
 		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY, HANGING,
 				leakingFailure("leak-domain", true), leakingFailure("leak-runtime", false)));
-		flowRepo = JpaTestContext.flowRepository(JpaTestContext.start(pg));
+		var ctx = JpaTestContext.start(pg);
+		flowRepo = JpaTestContext.flowRepository(ctx);
+		exRepo = JpaTestContext.executionRepository(ctx);
+		idemRepo = JpaTestContext.idempotencyRepository(ctx);
 		flows = new FlowService(flowRepo, new GraphValidator(registry::contains));
-		var exRepo = new JdbcExecutionRepository(jdbc, json);
 		executions = new ExecutionService(flows, exRepo, registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 64, 64));
 	}
 
@@ -248,7 +253,7 @@ class ExecutionTest {
 	@Test
 	void handlersAreResolvedByTypeAndUnknownTypeFails() {
 		var ran = new java.util.concurrent.atomic.AtomicBoolean();
-		var startOnly = new ExecutionService(flows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
+		var startOnly = new ExecutionService(flows, exRepo,
 				List.of(new com.prevention.fraud.validationflow.application.execution.NodeHandler() {
 					public String type() {
 						return "START";
@@ -430,7 +435,7 @@ class ExecutionTest {
 		var registry = new ValidatorRegistry(List.of(stubborn));
 		var ownFlows = new FlowService(flowRepo,
 				new GraphValidator(registry::contains));
-		var small = new ExecutionService(ownFlows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
+		var small = new ExecutionService(ownFlows, exRepo,
 				registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 2, 1));
 		var g = singleNodeGraph("stubborn", Map.of("timeout", "PT0.05S"));
 		ownFlows.activate("t", ownFlows.createDraft("t", "t", new FlowService.CreateFlow("k-stub", "PF", "CSTUB", "d", null,
@@ -602,7 +607,6 @@ class ExecutionTest {
 
 	@Test
 	void recoveryFailsStaleRunningAcrossTenantsAndDropsOrphanClaims() {
-		var repo = new JdbcExecutionRepository(jdbc, JsonMapper.builder().build());
 		var flowT = flows.get("t", activate("rec-t", "CR-t", graph(true, "x"), List.of()));
 		var du = flows.createDraft("u", "u", new FlowService.CreateFlow("rec-u", "PF", "CR-u", "d", null,
 				graph(true, "x"), List.of(), null));
@@ -614,7 +618,7 @@ class ExecutionTest {
 		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
 				+ "VALUES ('t', 'orphan-old', 'h', now() - interval '1 minute'), ('t', 'orphan-live', 'h', now() + interval '1 hour')");
 
-		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(repo, repo,
+		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(exRepo, idemRepo,
 				java.time.Duration.ofHours(1)).recover());
 
 		for (var ex : List.of(staleT, staleU)) {
@@ -633,7 +637,7 @@ class ExecutionTest {
 		// an execution finished meanwhile is not overwritten: the stale read loses on lock_version
 		FlowExecution late = running("t", flowT, old);
 		jdbc.update("UPDATE flow_execution SET status = 'COMPLETED', lock_version = 1 WHERE id = ?", late.id());
-		assertFalse(repo.update(late.fail(Map.of(), "X", "x")));
+		assertFalse(exRepo.update(late.fail(Map.of(), "X", "x")));
 		assertEquals(ExecutionStatus.COMPLETED, executions.get("t", late.id()).status());
 	}
 
@@ -642,7 +646,7 @@ class ExecutionTest {
 		var p = FlowExecution.pending(tenant, flow, null, Map.of());
 		var r = new FlowExecution(p.id(), tenant, p.flowDefinitionId(), p.flowKey(), p.flowVersion(), p.snapshot(), null,
 				ExecutionStatus.RUNNING, Map.of(), Map.of(), null, null, 0, startedAt, null, null, null);
-		new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()).insert(r);
+		exRepo.insert(r);
 		return r;
 	}
 
