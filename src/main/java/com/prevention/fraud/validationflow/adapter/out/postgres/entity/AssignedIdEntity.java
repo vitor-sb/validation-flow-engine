@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.entity;
 
 import java.util.UUID;
 
@@ -12,10 +12,10 @@ import jakarta.persistence.Transient;
 
 /** Id assigned by the application: {@link Persistable} makes Spring Data INSERT without a prior SELECT. */
 @MappedSuperclass
-abstract class AssignedIdEntity implements Persistable<UUID> {
+public abstract class AssignedIdEntity implements Persistable<UUID> {
 
 	@Id
-	UUID id;
+	public UUID id;
 
 	@Transient
 	private boolean isNew = true;

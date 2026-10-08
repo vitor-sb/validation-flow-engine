@@ -1,4 +1,7 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.mapper;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.FlowExecutionEntity;
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.NodeExecutionEntity;
 
 import java.time.Instant;
 import java.util.Map;
@@ -7,12 +10,12 @@ import java.util.UUID;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
-final class ExecutionMapper {
+public final class ExecutionMapper {
 
 	private ExecutionMapper() {
 	}
 
-	static FlowExecutionEntity toEntity(FlowExecution f) {
+	public static FlowExecutionEntity toEntity(FlowExecution f) {
 		var e = new FlowExecutionEntity();
 		e.id = f.id();
 		e.tenantId = f.tenantId();
@@ -34,13 +37,13 @@ final class ExecutionMapper {
 		return e;
 	}
 
-	static FlowExecution toDomain(FlowExecutionEntity e) {
+	public static FlowExecution toDomain(FlowExecutionEntity e) {
 		return new FlowExecution(e.id, e.tenantId, e.flowDefinitionId, e.flowKey, e.flowVersion, e.flowSnapshot,
 				e.correlationId, e.status, e.inputData, e.contextData, e.result, e.errorInfo, e.lockVersion,
 				e.startedAt, e.completedAt, e.parentExecutionId, e.parentNodeId);
 	}
 
-	static NodeExecutionEntity toEntity(String tenantId, UUID executionId, String nodeId, String nodeType, int attempt,
+	public static NodeExecutionEntity toEntity(String tenantId, UUID executionId, String nodeId, String nodeType, int attempt,
 			String status, Map<String, Object> output, Map<String, Object> error, Map<String, Object> input,
 			Instant startedAt, Instant completedAt) {
 		var n = new NodeExecutionEntity();
@@ -59,7 +62,7 @@ final class ExecutionMapper {
 		return n;
 	}
 
-	static NodeExecution toDomain(NodeExecutionEntity n) {
+	public static NodeExecution toDomain(NodeExecutionEntity n) {
 		return new NodeExecution(n.nodeId, n.nodeType, n.attempt, n.status, n.inputSnapshot, n.outputData,
 				n.errorInfo, n.startedAt, n.completedAt);
 	}

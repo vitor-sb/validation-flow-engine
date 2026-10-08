@@ -1,4 +1,6 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.repository;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.IdempotencyKeyEntity;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -9,7 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /** Per-key queries are scoped by tenantId; the two delete* sweeps are cross-tenant by design (recovery, retention). */
-interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKeyEntity, IdempotencyKeyEntity.Key> {
+public interface IdempotencyKeyJpaRepository extends JpaRepository<IdempotencyKeyEntity, IdempotencyKeyEntity.Key> {
 
 	/** An orphaned claim (no execution_id, lease expired) is taken over atomically; the row lock gives one winner. */
 	@Modifying(clearAutomatically = true)

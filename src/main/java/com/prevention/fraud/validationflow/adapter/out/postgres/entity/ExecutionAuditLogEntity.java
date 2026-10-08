@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.entity;
 
 import java.util.Map;
 import java.util.UUID;
@@ -13,21 +13,21 @@ import jakarta.persistence.Table;
 /** created_at is left to the column default. */
 @Entity
 @Table(name = "execution_audit_log")
-class ExecutionAuditLogEntity extends AssignedIdEntity {
+public class ExecutionAuditLogEntity extends AssignedIdEntity {
 
 	@Column(name = "tenant_id")
-	String tenantId;
+	public String tenantId;
 
 	@Column(name = "execution_id")
-	UUID executionId;
+	public UUID executionId;
 
 	@Column(name = "event_type")
-	String eventType;
+	public String eventType;
 
 	@Column(name = "node_id")
-	String nodeId;
+	public String nodeId;
 
 	@JdbcTypeCode(SqlTypes.JSON)
-	Map<String, Object> details;
+	public Map<String, Object> details;
 
 }

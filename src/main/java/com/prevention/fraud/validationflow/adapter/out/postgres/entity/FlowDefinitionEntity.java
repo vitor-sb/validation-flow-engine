@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.entity;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,51 +25,51 @@ import jakarta.persistence.Transient;
 /** Row of flow_definition; the id is assigned by the application, so {@link Persistable} avoids a SELECT before INSERT. */
 @Entity
 @Table(name = "flow_definition")
-class FlowDefinitionEntity implements Persistable<UUID> {
+public class FlowDefinitionEntity implements Persistable<UUID> {
 
 	@Id
-	UUID id;
+	public UUID id;
 
 	@Column(name = "tenant_id")
-	String tenantId;
+	public String tenantId;
 
 	@Column(name = "flow_key")
-	String flowKey;
+	public String flowKey;
 
-	int version;
+	public int version;
 
 	@Enumerated(EnumType.STRING)
-	FlowStatus status;
+	public FlowStatus status;
 
 	@Column(name = "user_type")
-	String userType;
+	public String userType;
 
-	String context;
+	public String context;
 
 	@Column(name = "display_name")
-	String displayName;
+	public String displayName;
 
-	String description;
+	public String description;
 
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "graph_definition")
-	Map<String, Object> graphDefinition;
+	public Map<String, Object> graphDefinition;
 
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "input_contract")
-	List<InputField> inputContract;
+	public List<InputField> inputContract;
 
 	@JdbcTypeCode(SqlTypes.JSON)
-	Map<String, Object> metadata;
+	public Map<String, Object> metadata;
 
 	@Column(name = "created_by")
-	String createdBy;
+	public String createdBy;
 
 	@Column(name = "created_at")
-	Instant createdAt;
+	public Instant createdAt;
 
 	@Column(name = "updated_at")
-	Instant updatedAt;
+	public Instant updatedAt;
 
 	@Transient
 	private boolean isNew = true;

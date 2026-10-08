@@ -1,4 +1,6 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.repository;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.IdempotencyKeyEntity;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -11,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 
 @Repository
-class JpaIdempotencyRepository implements IdempotencyRepository {
+public class JpaIdempotencyRepository implements IdempotencyRepository {
 
 	private final IdempotencyKeyJpaRepository keys;
 

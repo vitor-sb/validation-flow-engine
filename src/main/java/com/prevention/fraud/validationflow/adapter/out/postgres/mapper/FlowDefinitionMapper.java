@@ -1,15 +1,17 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.mapper;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.FlowDefinitionEntity;
 
 import java.util.List;
 
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 
-final class FlowDefinitionMapper {
+public final class FlowDefinitionMapper {
 
 	private FlowDefinitionMapper() {
 	}
 
-	static FlowDefinitionEntity toEntity(FlowDefinition f) {
+	public static FlowDefinitionEntity toEntity(FlowDefinition f) {
 		var e = new FlowDefinitionEntity();
 		e.id = f.id();
 		e.tenantId = f.tenantId();
@@ -29,7 +31,7 @@ final class FlowDefinitionMapper {
 		return e;
 	}
 
-	static FlowDefinition toDomain(FlowDefinitionEntity e) {
+	public static FlowDefinition toDomain(FlowDefinitionEntity e) {
 		return new FlowDefinition(e.id, e.tenantId, e.flowKey, e.version, e.status, e.userType, e.context,
 				e.displayName, e.description, e.graphDefinition,
 				e.inputContract == null ? List.of() : e.inputContract, e.metadata, e.createdBy, e.createdAt);

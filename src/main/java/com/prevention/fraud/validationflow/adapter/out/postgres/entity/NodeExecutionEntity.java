@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.entity;
 
 import java.time.Instant;
 import java.util.Map;
@@ -13,40 +13,40 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "node_execution")
-class NodeExecutionEntity extends AssignedIdEntity {
+public class NodeExecutionEntity extends AssignedIdEntity {
 
 	@Column(name = "tenant_id")
-	String tenantId;
+	public String tenantId;
 
 	@Column(name = "execution_id")
-	UUID executionId;
+	public UUID executionId;
 
 	@Column(name = "node_id")
-	String nodeId;
+	public String nodeId;
 
 	@Column(name = "node_type")
-	String nodeType;
+	public String nodeType;
 
-	int attempt;
+	public int attempt;
 
-	String status;
+	public String status;
 
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "input_snapshot")
-	Map<String, Object> inputSnapshot;
+	public Map<String, Object> inputSnapshot;
 
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "output_data")
-	Map<String, Object> outputData;
+	public Map<String, Object> outputData;
 
 	@JdbcTypeCode(SqlTypes.JSON)
 	@Column(name = "error_info")
-	Map<String, Object> errorInfo;
+	public Map<String, Object> errorInfo;
 
 	@Column(name = "started_at")
-	Instant startedAt;
+	public Instant startedAt;
 
 	@Column(name = "completed_at")
-	Instant completedAt;
+	public Instant completedAt;
 
 }

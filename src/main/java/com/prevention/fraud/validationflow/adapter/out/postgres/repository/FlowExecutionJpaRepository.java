@@ -1,4 +1,6 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.repository;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.FlowExecutionEntity;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,7 +16,7 @@ import org.springframework.data.repository.query.Param;
 import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 
 /** Every query is scoped by tenantId, except {@link #findByStatusAndStartedAtBefore} (recovery). */
-interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionEntity, UUID> {
+public interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionEntity, UUID> {
 
 	Optional<FlowExecutionEntity> findByTenantIdAndId(String tenantId, UUID id);
 

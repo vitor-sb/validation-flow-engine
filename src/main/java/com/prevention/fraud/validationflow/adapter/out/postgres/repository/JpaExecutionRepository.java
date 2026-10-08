@@ -1,4 +1,7 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.repository;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.ExecutionAuditLogEntity;
+import com.prevention.fraud.validationflow.adapter.out.postgres.mapper.ExecutionMapper;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,7 +18,7 @@ import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
 @Repository
-class JpaExecutionRepository implements ExecutionRepository {
+public class JpaExecutionRepository implements ExecutionRepository {
 
 	private final FlowExecutionJpaRepository executions;
 

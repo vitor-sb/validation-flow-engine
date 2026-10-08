@@ -74,6 +74,10 @@ class ArchitectureTest {
 			.allowEmptyShould(true);
 
 	@ArchTest
+	static final ArchRule entitiesStayInPostgresAdapter = noClasses().that().resideOutsideOfPackage(BASE + ".adapter.out.postgres..")
+			.should().dependOnClassesThat().resideInAPackage(BASE + ".adapter.out.postgres.entity..");
+
+	@ArchTest
 	static final ArchRule portsAreInterfaces = classes().that().resideInAPackage(BASE + ".application..ports")
 			.and().areTopLevelClasses().and().haveSimpleNameNotEndingWith("package-info")
 			.should().beInterfaces();

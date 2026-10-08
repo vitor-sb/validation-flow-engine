@@ -1,4 +1,6 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.repository;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.entity.FlowDefinitionEntity;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,7 +19,7 @@ import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
 import com.prevention.fraud.validationflow.domain.flow.InputField;
 
 /** Every query is scoped by tenantId. */
-interface FlowDefinitionJpaRepository extends JpaRepository<FlowDefinitionEntity, UUID> {
+public interface FlowDefinitionJpaRepository extends JpaRepository<FlowDefinitionEntity, UUID> {
 
 	@Query("select coalesce(max(f.version), 0) + 1 from FlowDefinitionEntity f "
 			+ "where f.tenantId = :tenantId and f.flowKey = :flowKey")

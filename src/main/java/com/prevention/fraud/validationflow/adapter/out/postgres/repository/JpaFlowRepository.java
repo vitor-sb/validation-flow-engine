@@ -1,4 +1,6 @@
-package com.prevention.fraud.validationflow.adapter.out.postgres;
+package com.prevention.fraud.validationflow.adapter.out.postgres.repository;
+
+import com.prevention.fraud.validationflow.adapter.out.postgres.mapper.FlowDefinitionMapper;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,7 +18,7 @@ import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
 
 @Repository
-class JpaFlowRepository implements FlowRepository {
+public class JpaFlowRepository implements FlowRepository {
 
 	private static final Sort LIST_ORDER = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("flowKey"),
 			Sort.Order.desc("version"));
