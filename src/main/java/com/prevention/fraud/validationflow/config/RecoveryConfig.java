@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
-import com.prevention.fraud.validationflow.application.execution.RecoveryService;
+import com.prevention.fraud.validationflow.application.execution.recovery.RecoveryService;
 
 /** Off unless `app.recovery.stale-after` is set; it must exceed the longest possible execution. */
 @Configuration

@@ -1,5 +1,9 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
+import com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaExecutionRepository;
+import com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaFlowRepository;
+import com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaIdempotencyRepository;
+
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;

@@ -1,5 +1,14 @@
 package com.prevention.fraud.validationflow.application.execution;
 
+import com.prevention.fraud.validationflow.application.execution.history.ExecutionRecorder;
+import com.prevention.fraud.validationflow.application.execution.node.Maps;
+import com.prevention.fraud.validationflow.application.execution.node.NodeConfig;
+import com.prevention.fraud.validationflow.application.execution.node.NodeHandler;
+import com.prevention.fraud.validationflow.application.execution.node.NodeHandlers;
+import com.prevention.fraud.validationflow.application.execution.node.NodeStep;
+import com.prevention.fraud.validationflow.application.execution.node.SubFlowRunner;
+import com.prevention.fraud.validationflow.application.execution.node.ValidatorRunner;
+
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionMetrics;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
@@ -25,7 +34,7 @@ import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 public class ExecutionService {
 
 	/** Persisted instead of the message of unexpected exceptions, which may carry input data. */
-	static final String UNEXPECTED = "unexpected error";
+	public static final String UNEXPECTED = "unexpected error";
 
 	private final FlowService flows;
 
@@ -63,7 +72,7 @@ public class ExecutionService {
 	 * Runs one flow; {@code chain} holds the flowKeys of the ancestors (empty for a root run) and {@code ctx} is filled
 	 * with the execution context so a parent can read the child's unmasked outputs.
 	 */
-	FlowExecution run(String tenantId, FlowDefinition flow, String correlationId,
+	public FlowExecution run(String tenantId, FlowDefinition flow, String correlationId,
 			Map<String, Object> inputData, UUID parentId, String parentNodeId, List<String> chain,
 			Map<String, Object> ctx) {
 		List<String> missing = flow.inputContract().stream()
@@ -133,7 +142,7 @@ public class ExecutionService {
 		}
 	}
 
-	ExecutionRecorder recorder() {
+	public ExecutionRecorder recorder() {
 		return recorder;
 	}
 
@@ -155,7 +164,7 @@ public class ExecutionService {
 		return repository.count(tenantId);
 	}
 
-	static Map<String, Object> error(String code, String message, boolean retryable) {
+	public static Map<String, Object> error(String code, String message, boolean retryable) {
 		return Map.of("code", code, "message", message, "retryable", retryable);
 	}
 
@@ -168,7 +177,7 @@ public class ExecutionService {
 	}
 
 	/** Persists with optimistic locking and returns the instance carrying the new lock version. */
-	FlowExecution save(FlowExecution ex) {
+	public FlowExecution save(FlowExecution ex) {
 		ex = new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
 				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), LogMasker.secrets(ex.contextData()),
 				LogMasker.secrets(ex.result()), errorInfo(ex), ex.lockVersion(), ex.startedAt(), ex.completedAt(),

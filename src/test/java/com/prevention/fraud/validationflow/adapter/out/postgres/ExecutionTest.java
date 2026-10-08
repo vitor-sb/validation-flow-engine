@@ -1,6 +1,6 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
-import com.prevention.fraud.validationflow.application.execution.RecoveryService;
+import com.prevention.fraud.validationflow.application.execution.recovery.RecoveryService;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +16,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
-import com.prevention.fraud.validationflow.application.execution.ValidatorRunner;
+import com.prevention.fraud.validationflow.application.execution.node.ValidatorRunner;
 import com.prevention.fraud.validationflow.config.MicrometerExecutionMetrics;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
@@ -254,12 +254,12 @@ class ExecutionTest {
 	void handlersAreResolvedByTypeAndUnknownTypeFails() {
 		var ran = new java.util.concurrent.atomic.AtomicBoolean();
 		var startOnly = new ExecutionService(flows, exRepo,
-				List.of(new com.prevention.fraud.validationflow.application.execution.NodeHandler() {
+				List.of(new com.prevention.fraud.validationflow.application.execution.node.NodeHandler() {
 					public String type() {
 						return "START";
 					}
 
-					public FlowExecution handle(com.prevention.fraud.validationflow.application.execution.NodeStep step) {
+					public FlowExecution handle(com.prevention.fraud.validationflow.application.execution.node.NodeStep step) {
 						ran.set(true);
 						return null;
 					}
@@ -618,7 +618,7 @@ class ExecutionTest {
 		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
 				+ "VALUES ('t', 'orphan-old', 'h', now() - interval '1 minute'), ('t', 'orphan-live', 'h', now() + interval '1 hour')");
 
-		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(exRepo, idemRepo,
+		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.recovery.RecoveryService(exRepo, idemRepo,
 				java.time.Duration.ofHours(1)).recover());
 
 		for (var ex : List.of(staleT, staleU)) {
