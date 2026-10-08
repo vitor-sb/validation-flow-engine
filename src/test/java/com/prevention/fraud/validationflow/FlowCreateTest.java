@@ -42,6 +42,9 @@ class FlowCreateTest {
 	@MockitoBean
 	com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository executionRepository;
 
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
+
 	static final String VALID = """
 			{"flowKey":"kyc","userType":"PF","context":"ONBOARDING","displayName":"KYC",
 			 "graphDefinition":{"startNodeId":"s","nodes":[],"edges":[]},

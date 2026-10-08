@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
@@ -18,7 +19,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 @Repository
-class JdbcExecutionRepository implements ExecutionRepository {
+class JdbcExecutionRepository implements ExecutionRepository, IdempotencyRepository {
 
 	private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() { };
 

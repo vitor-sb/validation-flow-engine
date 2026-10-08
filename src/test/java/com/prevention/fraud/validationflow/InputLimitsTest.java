@@ -35,6 +35,9 @@ class InputLimitsTest {
 	@MockitoBean
 	ExecutionRepository executions;
 
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
+
 	static String graph(int nodes) {
 		StringBuilder sb = new StringBuilder("{\"startNodeId\":\"n0\",\"nodes\":{");
 		for (int i = 0; i < nodes; i++) {

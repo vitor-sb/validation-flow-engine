@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
-import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import com.prevention.fraud.validationflow.application.execution.IdempotencyRetentionService;
 
 /** Off unless `app.retention.idempotency` is set: how long a replay of an Idempotency-Key is honoured. */
@@ -19,7 +19,7 @@ class RetentionConfig {
 
 	private final IdempotencyRetentionService service;
 
-	RetentionConfig(ExecutionRepository repository, @Value("${app.retention.idempotency}") Duration retention) {
+	RetentionConfig(IdempotencyRepository repository, @Value("${app.retention.idempotency}") Duration retention) {
 		this.service = new IdempotencyRetentionService(repository, retention);
 	}
 

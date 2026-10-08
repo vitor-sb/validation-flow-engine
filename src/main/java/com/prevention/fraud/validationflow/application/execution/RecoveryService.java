@@ -1,6 +1,7 @@
 package com.prevention.fraud.validationflow.application.execution;
 
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -12,10 +13,13 @@ public class RecoveryService {
 
 	private final ExecutionRepository repository;
 
+	private final IdempotencyRepository idempotency;
+
 	private final Duration staleAfter;
 
-	public RecoveryService(ExecutionRepository repository, Duration staleAfter) {
+	public RecoveryService(ExecutionRepository repository, IdempotencyRepository idempotency, Duration staleAfter) {
 		this.repository = repository;
+		this.idempotency = idempotency;
 		this.staleAfter = staleAfter;
 	}
 
@@ -31,7 +35,7 @@ public class RecoveryService {
 				failed++;
 			}
 		}
-		repository.deleteExpiredOrphanIdempotency();
+		idempotency.deleteExpiredOrphanIdempotency();
 		return failed;
 	}
 

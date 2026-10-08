@@ -614,7 +614,7 @@ class ExecutionTest {
 		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
 				+ "VALUES ('t', 'orphan-old', 'h', now() - interval '1 minute'), ('t', 'orphan-live', 'h', now() + interval '1 hour')");
 
-		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(repo,
+		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(repo, repo,
 				java.time.Duration.ofHours(1)).recover());
 
 		for (var ex : List.of(staleT, staleU)) {

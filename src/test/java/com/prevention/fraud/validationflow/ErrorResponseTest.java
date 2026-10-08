@@ -40,6 +40,9 @@ class ErrorResponseTest {
 	@MockitoBean
 	ExecutionRepository executions;
 
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
+
 	private static void assertErrorResponse(ResultActions r, int status, String code) throws Exception {
 		r.andExpect(status().is(status)).andExpect(jsonPath("$.code").value(code))
 				.andExpect(jsonPath("$.retryable").isBoolean()).andExpect(jsonPath("$.details").isArray())

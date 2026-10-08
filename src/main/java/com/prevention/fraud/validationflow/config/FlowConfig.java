@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.execution.IdempotentExecutionService;
 import com.prevention.fraud.validationflow.application.execution.ValidatorRunner;
@@ -32,7 +33,7 @@ class FlowConfig {
 	}
 
 	@Bean
-	IdempotentExecutionService idempotentExecutionService(ExecutionService executions, ExecutionRepository repository,
+	IdempotentExecutionService idempotentExecutionService(ExecutionService executions, IdempotencyRepository repository,
 			// must exceed the longest possible execution, or a live run could be taken over
 			@org.springframework.beans.factory.annotation.Value("${app.idempotency.lease:PT1H}") java.time.Duration lease) {
 		return new IdempotentExecutionService(executions, repository, lease);

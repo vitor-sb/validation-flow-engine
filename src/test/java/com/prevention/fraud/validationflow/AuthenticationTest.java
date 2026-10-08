@@ -30,6 +30,9 @@ class AuthenticationTest {
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository executionRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
+
 	@Autowired
 	MockMvc mvc;
 
