@@ -17,10 +17,7 @@ import java.util.UUID;
 import com.prevention.fraud.validationflow.domain.execution.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.execution.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
-import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
-import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
-import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
 import org.slf4j.Logger;
@@ -43,12 +40,15 @@ public class ExecutionService {
 
 	private final ValidatorRunner runner;
 
+	private final SubFlowRunner subFlows;
+
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
 			ValidatorRunner runner) {
 		this.flows = flows;
 		this.repository = repository;
 		this.registry = registry;
 		this.runner = runner;
+		this.subFlows = new SubFlowRunner(flows);
 	}
 
 	/** Synchronous: resolves the active flow, validates the input contract, walks the snapshot graph, returns the final state. */
@@ -179,79 +179,19 @@ public class ExecutionService {
 		}
 	}
 
-	/**
-	 * Runs the child flow (active version now) with only the mapped input and copies back only the mapped output into
-	 * {@code ctx.nodes[nodeId]}. Returns the failed parent, or null to keep walking. Depth: the child runs at level
-	 * {@code chain.size()} (root = 0) and may not exceed the node's maxDepth (default {@link GraphValidator#MAX_SUB_FLOW_DEPTH}).
-	 */
+	/** Returns the failed parent, or null to keep walking. */
 	@SuppressWarnings("unchecked")
 	private FlowExecution subFlow(FlowExecution ex, String nodeId, Map<String, Object> config,
 			Map<String, Object> ctx, List<String> chain) {
 		Instant started = Instant.now();
-		String childKey = (String) config.get("flowKey");
-		int limit = config.get("maxDepth") instanceof Integer d ? d : GraphValidator.MAX_SUB_FLOW_DEPTH;
-		String code;
-		String message;
-		Map<String, Object> details = new LinkedHashMap<>(Map.of("nodeId", nodeId));
-		if (chain.contains(childKey)) {
-			code = "SUB_FLOW_CYCLE_DETECTED";
-			message = "sub-flow " + childKey + " is already running in this chain " + chain;
+		var r = subFlows.run(ex, nodeId, config, ctx, chain, this::run);
+		if (r.code() != null) {
+			recordNode(ex, nodeId, "SUB_FLOW", 1, "FAILED", Map.of(), error(r.code(), r.message(), false), ctx, started);
+			return save(ex.fail(ctx, r.code(), r.message(), false, r.details()));
 		}
-		else if (chain.size() > limit) {
-			code = "SUB_FLOW_DEPTH_EXCEEDED";
-			message = "sub-flow " + childKey + " would run at depth " + chain.size() + ", maxDepth is " + limit;
-		}
-		else {
-			code = null;
-			message = null;
-		}
-		Map<String, Object> childCtx = new HashMap<>();
-		FlowExecution child = null;
-		if (code == null) {
-			Map<String, Object> input = new LinkedHashMap<>();
-			((Map<String, String>) config.getOrDefault("inputMapping", Map.of())).forEach((name, path) -> {
-				Object v = ConditionEvaluator.lookup(ctx, jsonPath(path));
-				if (v != null) {
-					input.put(name, v);
-				}
-			});
-			try {
-				FlowDefinition flow = flows.resolveActive(ex.tenantId(), childKey, null, null);
-				child = run(ex.tenantId(), flow, ex.correlationId(), input, ex.id(), nodeId, chain, childCtx);
-			}
-			catch (FlowException e) {
-				code = e.kind() == FlowException.Kind.INVALID_INPUT ? "SUB_FLOW_INVALID_INPUT" : "SUB_FLOW_NOT_FOUND";
-				message = String.valueOf(e.getMessage());
-			}
-			if (child != null && child.status() != ExecutionStatus.COMPLETED) {
-				code = "SUB_FLOW_FAILED"; // onFailure is always FAIL_PARENT
-				message = "sub-flow " + childKey + " ended " + child.status();
-				details.put("childExecutionId", child.id().toString());
-				details.put("childError", child.errorInfo() == null ? Map.of() : child.errorInfo());
-			}
-		}
-		if (code != null) {
-			Map<String, Object> error = error(code, message, false);
-			recordNode(ex, nodeId, "SUB_FLOW", 1, "FAILED", Map.of(), error, ctx, started);
-			return save(ex.fail(ctx, code, message, false, details));
-		}
-		Map<String, Object> out = new LinkedHashMap<>();
-		((Map<String, String>) config.getOrDefault("outputMapping", Map.of())).forEach((name, path) -> {
-			Object v = ConditionEvaluator.lookup(childCtx, jsonPath(path));
-			if (v != null) {
-				out.put(name, v);
-			}
-		});
-		out.put("success", true);
-		out.put("childExecutionId", child.id().toString());
-		((Map<String, Object>) ctx.get("nodes")).put(nodeId, out);
-		recordNode(ex, nodeId, "SUB_FLOW", 1, "COMPLETED", out, null, ctx, started);
+		((Map<String, Object>) ctx.get("nodes")).put(nodeId, r.output());
+		recordNode(ex, nodeId, "SUB_FLOW", 1, "COMPLETED", r.output(), null, ctx, started);
 		return null;
-	}
-
-	/** Only plain dotted JSONPath ({@code $.a.b}) is supported; {@code $} alone is the whole context. */
-	private static String jsonPath(String path) {
-		return path.startsWith("$.") ? path.substring(2) : path.substring(1);
 	}
 
 	/** Persists the attempt and logs it; payloads only appear in logs masked. */
