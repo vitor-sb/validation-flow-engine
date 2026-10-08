@@ -18,7 +18,7 @@ final class JpaTestContext {
 
 	@org.springframework.boot.test.context.TestConfiguration
 	@EnableAutoConfiguration
-	@Import({ JpaFlowRepository.class, JpaExecutionRepository.class, JdbcIdempotencyRepository.class })
+	@Import({ JpaFlowRepository.class, JpaExecutionRepository.class, JpaIdempotencyRepository.class })
 	static class Config {
 
 		@org.springframework.context.annotation.Bean
