@@ -1,6 +1,10 @@
 spring:
   application:
     name: validation-flow-engine
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
 
 management:
   endpoints:
