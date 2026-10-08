@@ -5,7 +5,6 @@ import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -18,14 +17,9 @@ import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 
 public class ExecutionService {
-
-	private static final Logger log = LoggerFactory.getLogger(ExecutionService.class);
 
 	/** Persisted instead of the message of unexpected exceptions, which may carry input data. */
 	static final String UNEXPECTED = "unexpected error";
@@ -33,6 +27,8 @@ public class ExecutionService {
 	private final FlowService flows;
 
 	private final ExecutionRepository repository;
+
+	private final ExecutionRecorder recorder;
 
 	private final Map<String, NodeHandler> handlers = new HashMap<>();
 
@@ -45,6 +41,7 @@ public class ExecutionService {
 	public ExecutionService(FlowService flows, ExecutionRepository repository, List<NodeHandler> handlers) {
 		this.flows = flows;
 		this.repository = repository;
+		this.recorder = new ExecutionRecorder(repository);
 		handlers.forEach(h -> this.handlers.put(h.type(), h));
 	}
 
@@ -69,15 +66,11 @@ public class ExecutionService {
 		}
 		FlowExecution ex = FlowExecution.pending(tenantId, flow, correlationId, inputData, parentId, parentNodeId);
 		repository.insert(new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
-				ex.snapshot(), ex.correlationId(), ex.status(), secrets(inputData), ex.contextData(), ex.result(),
+				ex.snapshot(), ex.correlationId(), ex.status(), LogMasker.secrets(inputData), ex.contextData(), ex.result(),
 				ex.errorInfo(), ex.lockVersion(), ex.startedAt(), ex.completedAt(), ex.parentExecutionId(),
 				ex.parentNodeId()));
 		ex = save(ex.start());
-		var outerMdc = MDC.getCopyOfContextMap();
-		MDC.put("correlationId", String.valueOf(correlationId));
-		MDC.put("executionId", ex.id().toString());
-		MDC.put("flowKey", ex.flowKey());
-		MDC.put("flowVersion", String.valueOf(ex.flowVersion()));
+		var outerMdc = recorder.enterMdc(ex, correlationId);
 		// fresh map per execution: nothing is shared between runs
 		ctx.put("inputData", inputData);
 		Map<String, Object> outputs = new LinkedHashMap<>();
@@ -86,21 +79,15 @@ public class ExecutionService {
 			List<String> path = new ArrayList<>(chain);
 			path.add(ex.flowKey());
 			FlowExecution done = walk(ex, ctx, outputs, path);
-			MDC.put("status", done.status().name());
-			log.info("execution finished");
+			recorder.finished(done);
 			return done;
 		}
 		catch (RuntimeException e) {
-			log.warn("execution error class={} message={}", e.getClass().getName(), redact(e.getMessage(), ctx));
+			recorder.failed(e, ctx);
 			return save(ex.fail(ctx, "EXECUTION_ERROR", UNEXPECTED, false, Map.of("exception", e.getClass().getName())));
 		}
 		finally {
-			if (outerMdc == null) {
-				MDC.clear();
-			}
-			else {
-				MDC.setContextMap(outerMdc);
-			}
+			recorder.restoreMdc(outerMdc);
 		}
 	}
 
@@ -125,9 +112,8 @@ public class ExecutionService {
 				Map<String, Object> cond = t.get("condition") == null ? null : Maps.of(t.get("condition"));
 				// a transition without condition is the default branch
 				var ev = cond == null ? null : ConditionEvaluator.evaluate(cond, ctx);
-				repository.audit(ex.tenantId(), ex.id(), "TRANSITION_EVALUATED", id, Map.of("to", t.get("to"),
-						"result", ev == null || ev.result(),
-						"observed", String.valueOf(ev == null ? null : maskObserved(cond, ev.observed()))));
+				recorder.auditTransition(ex, id, t.get("to"), ev == null || ev.result(),
+						ev == null ? null : LogMasker.maskObserved(cond, ev.observed()));
 				if (ev == null || ev.result()) {
 					next = (String) t.get("to");
 					break;
@@ -140,22 +126,8 @@ public class ExecutionService {
 		}
 	}
 
-	/** Persists the attempt and logs it; payloads only appear in logs masked. */
-	void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
-			Map<String, Object> output, Map<String, Object> error, Map<String, Object> ctx, Instant started) {
-		error = error == null ? null : Maps.of(redact(error, ctx));
-		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, secrets(output), secrets(error),
-				secrets(ctx), started);
-		MDC.put("nodeId", nodeId);
-		MDC.put("status", status);
-		try {
-			log.info("node attempt={} type={} output={} error={}", attempt, type, LogMasker.mask(output),
-					LogMasker.mask(error));
-		}
-		finally {
-			MDC.remove("nodeId");
-			MDC.remove("status");
-		}
+	ExecutionRecorder recorder() {
+		return recorder;
 	}
 
 	public FlowExecution get(String tenantId, UUID id) {
@@ -176,27 +148,6 @@ public class ExecutionService {
 		return repository.count(tenantId);
 	}
 
-	private static Map<String, Object> secrets(Map<String, Object> m) {
-		return m == null ? null : Maps.of(LogMasker.maskSecrets(m));
-	}
-
-	/** Replaces the credential values found in {@code ctx} by {@code ***} in every string of {@code value}. */
-	private static Object redact(Object value, Map<String, Object> ctx) {
-		return value == null ? null : LogMasker.redact(value, LogMasker.credentialValues(ctx));
-	}
-
-	/** {@code observed} mirrors the condition tree (a list for AND/OR/NOT); credential fields are never recorded. */
-	private static Object maskObserved(Map<String, Object> cond, Object observed) {
-		if (observed instanceof List<?> obs && cond.get("conditions") instanceof List<?> subs) {
-			List<Object> out = new ArrayList<>();
-			for (int i = 0; i < obs.size(); i++) {
-				out.add(maskObserved(Maps.of(subs.get(i)), obs.get(i)));
-			}
-			return out;
-		}
-		return LogMasker.isCredential(String.valueOf(cond.get("field"))) ? "***" : observed;
-	}
-
 	static Map<String, Object> error(String code, String message, boolean retryable) {
 		return Map.of("code", code, "message", message, "retryable", retryable);
 	}
@@ -205,15 +156,15 @@ public class ExecutionService {
 		if (ex.errorInfo() == null) {
 			return null;
 		}
-		Map<String, Object> redacted = Maps.of(redact(ex.errorInfo(), ex.contextData()));
-		return secrets(redacted);
+		Map<String, Object> redacted = Maps.of(LogMasker.redact(ex.errorInfo(), ex.contextData()));
+		return LogMasker.secrets(redacted);
 	}
 
 	/** Persists with optimistic locking and returns the instance carrying the new lock version. */
 	FlowExecution save(FlowExecution ex) {
 		ex = new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
-				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), secrets(ex.contextData()),
-				secrets(ex.result()), errorInfo(ex), ex.lockVersion(), ex.startedAt(), ex.completedAt(),
+				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), LogMasker.secrets(ex.contextData()),
+				LogMasker.secrets(ex.result()), errorInfo(ex), ex.lockVersion(), ex.startedAt(), ex.completedAt(),
 				ex.parentExecutionId(), ex.parentNodeId());
 		if (!repository.update(ex)) {
 			throw new IllegalStateException("execution " + ex.id() + " was modified concurrently");

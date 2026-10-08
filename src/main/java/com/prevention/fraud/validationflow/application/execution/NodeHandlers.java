@@ -20,7 +20,7 @@ final class NodeHandlers {
 	}
 
 	private static void complete(NodeStep s, Map<String, Object> out, Instant started) {
-		s.host().recordNode(s.ex(), s.nodeId(), s.type(), 1, "COMPLETED", out, null, s.ctx(), started);
+		s.host().recorder().recordNode(s.ex(), s.nodeId(), s.type(), 1, "COMPLETED", out, null, s.ctx(), started);
 	}
 
 	record Start() implements NodeHandler {
@@ -65,7 +65,7 @@ final class NodeHandlers {
 			if (v == null) {
 				return s.fail("VALIDATOR_NOT_FOUND", "validator not registered at node " + s.nodeId());
 			}
-			var a = runner.run(s.nodeId(), v, s.ctx(), s.config(), (att, st, out, err, t) -> s.host()
+			var a = runner.run(s.nodeId(), v, s.ctx(), s.config(), (att, st, out, err, t) -> s.host().recorder()
 					.recordNode(s.ex(), s.nodeId(), s.type(), att, st, out, err, s.ctx(), t));
 			if (a.error() != null) {
 				return s.host().save(s.ex().fail(s.ctx(), (String) a.error().get("code"),
@@ -90,7 +90,7 @@ final class NodeHandlers {
 			Instant started = Instant.now();
 			var r = subFlows.run(s.ex(), s.nodeId(), s.config(), s.ctx(), s.chain(), s.host()::run);
 			if (r.code() != null) {
-				s.host().recordNode(s.ex(), s.nodeId(), s.type(), 1, "FAILED", Map.of(),
+				s.host().recorder().recordNode(s.ex(), s.nodeId(), s.type(), 1, "FAILED", Map.of(),
 						ExecutionService.error(r.code(), r.message(), false), s.ctx(), started);
 				return s.host().save(s.ex().fail(s.ctx(), r.code(), r.message(), false, r.details()));
 			}

@@ -1,5 +1,6 @@
 package com.prevention.fraud.validationflow.application.masking;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Collection;
 import java.util.Comparator;
@@ -24,7 +25,6 @@ public final class LogMasker {
 	private LogMasker() {
 	}
 
-	@SuppressWarnings("unchecked")
 	public static Object mask(Object value) {
 		return mask(value, SENSITIVE);
 	}
@@ -87,6 +87,36 @@ public final class LogMasker {
 			return l.stream().map(e -> redact(e, secrets)).toList();
 		}
 		return value;
+	}
+
+	/** Persistence view of {@code m}: credential values masked; null stays null. */
+	public static Map<String, Object> secrets(Map<String, Object> m) {
+		return m == null ? null : asMap(maskSecrets(m));
+	}
+
+	/** Replaces the credential values found in {@code ctx} by {@code ***} in every string of {@code value}. */
+	public static Object redact(Object value, Map<String, Object> ctx) {
+		return value == null ? null : redact(value, credentialValues(ctx));
+	}
+
+	/** {@code observed} mirrors the condition tree (a list for AND/OR/NOT); credential fields are never recorded. */
+	public static Object maskObserved(Map<String, Object> cond, Object observed) {
+		if (observed instanceof List<?> obs && cond.get("conditions") instanceof List<?> subs) {
+			List<Object> out = new ArrayList<>();
+			for (int i = 0; i < obs.size(); i++) {
+				out.add(maskObserved(asMap(subs.get(i)), obs.get(i)));
+			}
+			return out;
+		}
+		return isCredential(String.valueOf(cond.get("field"))) ? "***" : observed;
+	}
+
+	private static Map<String, Object> asMap(Object o) {
+		Map<String, Object> out = new LinkedHashMap<>();
+		if (o instanceof Map<?, ?> m) {
+			m.forEach((k, v) -> out.put(String.valueOf(k), v));
+		}
+		return out;
 	}
 
 }
