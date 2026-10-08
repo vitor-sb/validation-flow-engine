@@ -44,6 +44,8 @@ class ExecutionTest {
 
 	static JdbcTemplate jdbc;
 
+	static com.prevention.fraud.validationflow.application.flow.ports.FlowRepository flowRepo;
+
 	static FlowService flows;
 
 	static ExecutionService executions;
@@ -184,7 +186,8 @@ class ExecutionTest {
 		var json = JsonMapper.builder().build();
 		var registry = new ValidatorRegistry(List.of(FAKE, FLAKY, SLOW, LEAKY, HANGING,
 				leakingFailure("leak-domain", true), leakingFailure("leak-runtime", false)));
-		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
+		flowRepo = JpaTestContext.flowRepository(JpaTestContext.start(pg));
+		flows = new FlowService(flowRepo, new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
 		executions = new ExecutionService(flows, exRepo, registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 64, 64));
 	}
@@ -425,7 +428,7 @@ class ExecutionTest {
 			}
 		};
 		var registry = new ValidatorRegistry(List.of(stubborn));
-		var ownFlows = new FlowService(new JdbcFlowRepository(jdbc, JsonMapper.builder().build()),
+		var ownFlows = new FlowService(flowRepo,
 				new GraphValidator(registry::contains));
 		var small = new ExecutionService(ownFlows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
 				registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 2, 1));

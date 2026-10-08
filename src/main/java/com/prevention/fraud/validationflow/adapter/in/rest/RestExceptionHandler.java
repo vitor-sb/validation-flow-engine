@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -68,6 +69,25 @@ class RestExceptionHandler extends ResponseEntityExceptionHandler {
 	@ResponseStatus(HttpStatus.CONFLICT)
 	ErrorResponse duplicate(DuplicateKeyException e) {
 		return new ErrorResponse("CONFLICT", true, java.util.List.of("resource already exists"));
+	}
+
+	/** JPA reports unique violations as a plain DataIntegrityViolationException: 409 for those, 500 for other integrity errors. */
+	@ExceptionHandler(DataIntegrityViolationException.class)
+	ResponseEntity<ErrorResponse> integrity(DataIntegrityViolationException e) {
+		if (hasSqlState(e, "23505")) {
+			return ResponseEntity.status(HttpStatus.CONFLICT)
+					.body(new ErrorResponse("CONFLICT", true, List.of("resource already exists")));
+		}
+		return unexpected(e);
+	}
+
+	private static boolean hasSqlState(Throwable t, String state) {
+		for (; t != null; t = t.getCause()) {
+			if (t instanceof java.sql.SQLException sql && state.equals(sql.getSQLState())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@ExceptionHandler(FlowException.class)

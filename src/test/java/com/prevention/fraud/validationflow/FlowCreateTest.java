@@ -75,6 +75,21 @@ class FlowCreateTest {
 	}
 
 	@Test
+	void jpaUniqueViolationReturns409ButOtherIntegrityErrorsReturn500() throws Exception {
+		var unique = new org.springframework.dao.DataIntegrityViolationException("x",
+				new java.sql.SQLException("duplicate key", "23505"));
+		when(repository.save(any())).thenThrow(unique);
+		mvc.perform(post("/api/v1/flows").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
+				.content(VALID)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONFLICT"));
+		var notNull = new org.springframework.dao.DataIntegrityViolationException("x",
+				new java.sql.SQLException("null value", "23502"));
+		org.mockito.Mockito.doThrow(notNull).when(repository).save(any());
+		mvc.perform(post("/api/v1/flows").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
+				.content(VALID)).andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+	}
+
+	@Test
 	void validateReturnsErrorsWithoutPersisting() throws Exception {
 		mvc.perform(post("/api/v1/flows/validate").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"graphDefinition\":{\"nodes\":{}}}"))
