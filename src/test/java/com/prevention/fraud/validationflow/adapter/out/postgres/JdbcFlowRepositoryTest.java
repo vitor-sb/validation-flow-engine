@@ -1,5 +1,7 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
 import java.util.List;
 import java.util.Map;
 
@@ -12,9 +14,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import com.prevention.fraud.validationflow.application.FlowService;
-import com.prevention.fraud.validationflow.domain.FlowStatus;
-import com.prevention.fraud.validationflow.domain.InputField;
+import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
+import com.prevention.fraud.validationflow.domain.flow.InputField;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -33,7 +35,7 @@ class JdbcFlowRepositoryTest {
 		var repo = new JdbcFlowRepository(
 				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
 				JsonMapper.builder().build());
-		var service = new FlowService(repo, new com.prevention.fraud.validationflow.domain.GraphValidator(t -> false));
+		var service = new FlowService(repo, new com.prevention.fraud.validationflow.domain.flow.GraphValidator(t -> false));
 		var cmd = new FlowService.CreateFlow("kyc", "PF", "ONB", "KYC", null, Map.of("nodes", List.of()),
 				List.of(new InputField("cpf", "STRING", true)), null);
 		assertEquals(1, service.createDraft("a", "a", cmd).version());
@@ -45,7 +47,7 @@ class JdbcFlowRepositoryTest {
 		assertEquals(3, repo.nextVersion("a", "kyc"));
 		assertEquals(2, repo.nextVersion("b", "kyc"));
 		// unique (tenant_id, flow_key, version) violation surfaces as DuplicateKeyException (mapped to 409)
-		assertThrows(DuplicateKeyException.class, () -> repo.save(new com.prevention.fraud.validationflow.domain.FlowDefinition(java.util.UUID.randomUUID(),
+		assertThrows(DuplicateKeyException.class, () -> repo.save(new com.prevention.fraud.validationflow.domain.flow.FlowDefinition(java.util.UUID.randomUUID(),
 				b.tenantId(), b.flowKey(), b.version(), b.status(), b.userType(), b.context(), b.displayName(),
 				b.description(), b.graphDefinition(), b.inputContract(), b.metadata(), b.createdBy(), b.createdAt())));
 	}

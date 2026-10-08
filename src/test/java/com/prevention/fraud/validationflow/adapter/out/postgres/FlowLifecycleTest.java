@@ -1,5 +1,6 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -16,10 +17,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import com.prevention.fraud.validationflow.application.FlowException;
-import com.prevention.fraud.validationflow.application.FlowService;
-import com.prevention.fraud.validationflow.domain.FlowStatus;
-import com.prevention.fraud.validationflow.domain.GraphValidator;
+import com.prevention.fraud.validationflow.application.flow.FlowException;
+import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
+import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -152,7 +153,7 @@ class FlowLifecycleTest {
 				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
 				JsonMapper.builder().build()) {
 			@Override
-			public java.util.List<com.prevention.fraud.validationflow.domain.FlowDefinition> findActive(String t,
+			public java.util.List<com.prevention.fraud.validationflow.domain.flow.FlowDefinition> findActive(String t,
 					String k, String u, String c) {
 				return java.util.List.of(one, two);
 			}

@@ -1,5 +1,7 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
+import com.prevention.fraud.validationflow.application.execution.RecoveryService;
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,17 +15,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import com.prevention.fraud.validationflow.application.ExecutionService;
-import com.prevention.fraud.validationflow.application.FlowException;
-import com.prevention.fraud.validationflow.application.FlowService;
-import com.prevention.fraud.validationflow.application.ValidatorRegistry;
-import com.prevention.fraud.validationflow.application.ValidatorException;
-import com.prevention.fraud.validationflow.application.ValidatorStrategy;
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.application.execution.ValidatorRunner;
+import com.prevention.fraud.validationflow.config.MicrometerExecutionMetrics;
+import com.prevention.fraud.validationflow.application.flow.FlowException;
+import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
+import com.prevention.fraud.validationflow.application.validator.ValidatorException;
+import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import com.prevention.fraud.validationflow.domain.ExecutionStatus;
-import com.prevention.fraud.validationflow.domain.FlowExecution;
-import com.prevention.fraud.validationflow.domain.GraphValidator;
-import com.prevention.fraud.validationflow.domain.InputField;
+import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
+import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
+import com.prevention.fraud.validationflow.domain.flow.InputField;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -182,7 +186,7 @@ class ExecutionTest {
 				leakingFailure("leak-domain", true), leakingFailure("leak-runtime", false)));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
-		executions = new ExecutionService(flows, exRepo, registry, meters, java.time.Duration.ofHours(1), 64, 64);
+		executions = new ExecutionService(flows, exRepo, registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 64, 64));
 	}
 
 	static UUID activate(String key, String ctx, Map<String, Object> g, List<InputField> contract) {
@@ -236,6 +240,45 @@ class ExecutionTest {
 				|| e.getThrowableProxy() != null));
 		assertTrue(jdbc.queryForObject("SELECT count(*) FROM execution_audit_log WHERE details::text LIKE '%***%'",
 				Integer.class) > 0);
+	}
+
+	@Test
+	void handlersAreResolvedByTypeAndUnknownTypeFails() {
+		var ran = new java.util.concurrent.atomic.AtomicBoolean();
+		var startOnly = new ExecutionService(flows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
+				List.of(new com.prevention.fraud.validationflow.application.execution.NodeHandler() {
+					public String type() {
+						return "START";
+					}
+
+					public FlowExecution handle(com.prevention.fraud.validationflow.application.execution.NodeStep step) {
+						ran.set(true);
+						return null;
+					}
+				}), new MicrometerExecutionMetrics(meters));
+		activate("k-handler", "CH", graph(true, "v1"), List.of());
+		FlowExecution f = startOnly.execute("t", null, "PF", "CH", Map.of(), null);
+		assertTrue(ran.get());
+		assertEquals(ExecutionStatus.FAILED, f.status());
+		assertEquals("UNSUPPORTED_NODE_TYPE", f.errorInfo().get("code"));
+	}
+
+	@Test
+	void executionCounterAndTimersTrackCompletedAndFailed() {
+		double completed = count("COMPLETED"), failed = count("FAILED");
+		activate("k-met-ok", "CMO", graph(true, "v1"), List.of());
+		activate("k-met-bad", "CMB", graph(false, "v1"), List.of());
+		executions.execute("t", null, "PF", "CMO", Map.of("ok", true), null);
+		executions.execute("t", null, "PF", "CMB", Map.of("ok", false), null);
+		assertEquals(completed + 1, count("COMPLETED"));
+		assertEquals(failed + 1, count("FAILED"));
+		assertTrue(meters.get("validation.execution.duration").tag("status", "COMPLETED").timer().count() >= 1);
+		assertTrue(meters.get("validation.node.duration").tag("type", "VALIDATION").timer().count() >= 1);
+	}
+
+	private static double count(String status) {
+		var c = meters.find("validation.execution").tag("status", status).counter();
+		return c == null ? 0 : c.count();
 	}
 
 	@Test
@@ -385,7 +428,7 @@ class ExecutionTest {
 		var ownFlows = new FlowService(new JdbcFlowRepository(jdbc, JsonMapper.builder().build()),
 				new GraphValidator(registry::contains));
 		var small = new ExecutionService(ownFlows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
-				registry, meters, java.time.Duration.ofHours(1), 2, 1);
+				registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 2, 1));
 		var g = singleNodeGraph("stubborn", Map.of("timeout", "PT0.05S"));
 		ownFlows.activate("t", ownFlows.createDraft("t", "t", new FlowService.CreateFlow("k-stub", "PF", "CSTUB", "d", null,
 				g, List.of(), null)).id());
@@ -568,7 +611,7 @@ class ExecutionTest {
 		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
 				+ "VALUES ('t', 'orphan-old', 'h', now() - interval '1 minute'), ('t', 'orphan-live', 'h', now() + interval '1 hour')");
 
-		assertEquals(2, new com.prevention.fraud.validationflow.application.RecoveryService(repo,
+		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(repo,
 				java.time.Duration.ofHours(1)).recover());
 
 		for (var ex : List.of(staleT, staleU)) {
@@ -591,7 +634,7 @@ class ExecutionTest {
 		assertEquals(ExecutionStatus.COMPLETED, executions.get("t", late.id()).status());
 	}
 
-	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.FlowDefinition flow,
+	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.flow.FlowDefinition flow,
 			java.time.Instant startedAt) {
 		var p = FlowExecution.pending(tenant, flow, null, Map.of());
 		var r = new FlowExecution(p.id(), tenant, p.flowDefinitionId(), p.flowKey(), p.flowVersion(), p.snapshot(), null,

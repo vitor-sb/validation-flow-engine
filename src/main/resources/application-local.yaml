@@ -1,0 +1,16 @@
+# Perfil de desenvolvimento local: lê o arquivo .env da raiz (veja .env.example).
+# Ative com SPRING_PROFILES_ACTIVE=local (acrescente ",loadtest" para ter o validator fake).
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+
+app:
+  security:
+    api-keys:
+      - key: ${API_KEY}
+        tenant-id: ${API_KEY_TENANT}
+        scopes: ${API_KEY_SCOPES}

@@ -1,5 +1,8 @@
 package com.prevention.fraud.validationflow;
 
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.prevention.fraud.validationflow.application.FlowRepository;
+import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -37,7 +40,7 @@ class FlowCreateTest {
 	FlowRepository repository;
 
 	@MockitoBean
-	com.prevention.fraud.validationflow.application.ExecutionRepository executionRepository;
+	com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository executionRepository;
 
 	static final String VALID = """
 			{"flowKey":"kyc","userType":"PF","context":"ONBOARDING","displayName":"KYC",
@@ -83,8 +86,8 @@ class FlowCreateTest {
 	@Test
 	void activateInvalidGraphReturns422() throws Exception {
 		var id = java.util.UUID.randomUUID();
-		when(repository.findById("t1", id)).thenReturn(java.util.Optional.of(new com.prevention.fraud.validationflow.domain.FlowDefinition(
-				id, "t1", "kyc", 1, com.prevention.fraud.validationflow.domain.FlowStatus.DRAFT, "PF", "C", "d", null,
+		when(repository.findById("t1", id)).thenReturn(java.util.Optional.of(new com.prevention.fraud.validationflow.domain.flow.FlowDefinition(
+				id, "t1", "kyc", 1, com.prevention.fraud.validationflow.domain.flow.FlowStatus.DRAFT, "PF", "C", "d", null,
 				java.util.Map.of("nodes", java.util.Map.of()), java.util.List.of(), null, "t1", java.time.Instant.now())));
 		mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/v1/flows/" + id + "/activate")
 				.header("X-API-Key", "k")).andExpect(status().isUnprocessableContent())

@@ -8,8 +8,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
-import com.prevention.fraud.validationflow.application.ExecutionRepository;
-import com.prevention.fraud.validationflow.application.RecoveryService;
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.RecoveryService;
 
 /** Off unless `app.recovery.stale-after` is set; it must exceed the longest possible execution. */
 @Configuration

@@ -12,8 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.prevention.fraud.validationflow.application.ExecutionRepository;
-import com.prevention.fraud.validationflow.application.FlowRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
 
 @SpringBootTest(properties = {
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"

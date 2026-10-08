@@ -25,12 +25,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import com.prevention.fraud.validationflow.application.FlowService;
-import com.prevention.fraud.validationflow.config.TenantPrincipal;
-import com.prevention.fraud.validationflow.domain.FlowDefinition;
-import com.prevention.fraud.validationflow.domain.FlowStatus;
-import com.prevention.fraud.validationflow.domain.GraphValidator;
-import com.prevention.fraud.validationflow.domain.InputField;
+import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.config.security.TenantPrincipal;
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
+import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
+import com.prevention.fraud.validationflow.domain.flow.InputField;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
