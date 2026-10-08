@@ -28,7 +28,7 @@ class FlowConfig {
 			// caps threads stuck in validators that ignore interrupt; size to expected concurrent timed validators
 			@org.springframework.beans.factory.annotation.Value("${app.validators.max-threads:64}") int maxThreads,
 			@org.springframework.beans.factory.annotation.Value("${app.validators.queue-capacity:128}") int queueCapacity) {
-		return new ExecutionService(flows, repository, registry, new ValidatorRunner(meters, maxThreads, queueCapacity));
+		return new ExecutionService(flows, repository, registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), maxThreads, queueCapacity));
 	}
 
 	@Bean

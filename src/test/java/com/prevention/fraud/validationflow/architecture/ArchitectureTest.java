@@ -24,4 +24,9 @@ class ArchitectureTest {
 			.should().dependOnClassesThat().resideInAPackage(BASE + ".adapter..")
 			.allowEmptyShould(true);
 
+	@ArchTest
+	static final ArchRule applicationIsFreeOfMicrometer = noClasses().that().resideInAPackage(BASE + ".application..")
+			.should().dependOnClassesThat().resideInAPackage("io.micrometer..")
+			.allowEmptyShould(true);
+
 }

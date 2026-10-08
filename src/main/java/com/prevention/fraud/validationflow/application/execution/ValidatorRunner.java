@@ -1,10 +1,10 @@
 package com.prevention.fraud.validationflow.application.execution;
 
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionMetrics;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
 import com.prevention.fraud.validationflow.application.validator.ValidatorException;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
-import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -35,13 +35,13 @@ public class ValidatorRunner {
 	record Attempt(ValidatorStrategy.ValidationResult result, Map<String, Object> error, int attempts) {
 	}
 
-	private final MeterRegistry meters;
+	private final ExecutionMetrics meters;
 
 	// only used when a node has config.timeout. Bounded: a validator that ignores interrupt keeps its thread, so
 	// without a cap hung validators could exhaust the JVM. Daemon threads so they never block shutdown.
 	private final ThreadPoolExecutor timeoutPool;
 
-	public ValidatorRunner(MeterRegistry meters, int maxThreads, int queueCapacity) {
+	public ValidatorRunner(ExecutionMetrics meters, int maxThreads, int queueCapacity) {
 		this.meters = meters;
 		this.timeoutPool = new ThreadPoolExecutor(maxThreads, maxThreads, 60, TimeUnit.SECONDS,
 				new ArrayBlockingQueue<>(queueCapacity), r -> {
@@ -68,7 +68,7 @@ public class ValidatorRunner {
 				return new Attempt(r, null, attempt);
 			}
 			catch (TimeoutException e) {
-				meters.counter("validation.node.timeout", "validator", v.key()).increment();
+				meters.nodeTimeout(v.key());
 				status = "TIMED_OUT";
 				error = ExecutionService.error("NODE_TIMEOUT", "node " + nodeId + " exceeded " + timeout, true);
 			}
@@ -79,11 +79,11 @@ public class ValidatorRunner {
 				error = unexpected(nodeId, e, ctx);
 			}
 			recorder.record(attempt, status, Map.of(), error, started);
-			meters.counter("validation.node.error", "validator", v.key(), "code", (String) error.get("code")).increment();
+			meters.nodeError(v.key(), (String) error.get("code"));
 			if (!(Boolean) error.get("retryable") || attempt >= max) {
 				return new Attempt(null, error, attempt);
 			}
-			meters.counter("validation.node.retry", "validator", v.key()).increment();
+			meters.nodeRetry(v.key());
 			if (!sleep(backoffMillis(config.retryPolicy().delay(), config.retryPolicy().backoffExponential(), attempt))) {
 				return new Attempt(null, ExecutionService.error("INTERRUPTED", "interrupted while backing off", false),
 						attempt);
@@ -127,7 +127,7 @@ public class ValidatorRunner {
 			f = timeoutPool.submit(() -> v.execute(input));
 		}
 		catch (RejectedExecutionException e) {
-			meters.counter("validation.node.rejected", "validator", v.key()).increment();
+			meters.nodeRejected(v.key());
 			throw new ValidatorException("NODE_REJECTED", "validator capacity exhausted, try again later", true);
 		}
 		try {
