@@ -1,8 +1,10 @@
 package com.prevention.fraud.validationflow.application.execution;
 
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionMetrics;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -16,8 +18,11 @@ class ExecutionRecorder {
 
 	private final ExecutionRepository repository;
 
-	ExecutionRecorder(ExecutionRepository repository) {
+	private final ExecutionMetrics metrics;
+
+	ExecutionRecorder(ExecutionRepository repository, ExecutionMetrics metrics) {
 		this.repository = repository;
+		this.metrics = metrics;
 	}
 
 	/** Persists the attempt and logs it; payloads only appear in logs masked. */
@@ -26,6 +31,7 @@ class ExecutionRecorder {
 		error = error == null ? null : Maps.of(LogMasker.redact(error, ctx));
 		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, LogMasker.secrets(output),
 				LogMasker.secrets(error), LogMasker.secrets(ctx), started);
+		metrics.nodeFinished(type, status, Duration.between(started, Instant.now()));
 		MDC.put("nodeId", nodeId);
 		MDC.put("status", status);
 		try {
@@ -60,6 +66,10 @@ class ExecutionRecorder {
 		else {
 			MDC.setContextMap(outer);
 		}
+	}
+
+	void executionFinished(String status, Duration duration) {
+		metrics.executionFinished(status, duration);
 	}
 
 	void finished(FlowExecution done) {

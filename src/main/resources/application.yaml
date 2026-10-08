@@ -3,6 +3,10 @@ spring:
     name: validation-flow-engine
 
 management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
   endpoint:
     health:
       probes:

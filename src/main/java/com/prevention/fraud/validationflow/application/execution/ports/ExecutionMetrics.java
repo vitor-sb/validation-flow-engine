@@ -11,4 +11,8 @@ public interface ExecutionMetrics {
 
 	void nodeRejected(String validator);
 
+	void executionFinished(String status, java.time.Duration duration);
+
+	void nodeFinished(String type, String status, java.time.Duration duration);
+
 }

@@ -1,10 +1,13 @@
 package com.prevention.fraud.validationflow.application.execution;
 
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionMetrics;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -34,14 +37,15 @@ public class ExecutionService {
 
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
 			ValidatorRunner runner) {
-		this(flows, repository, NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)));
+		this(flows, repository, NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)), runner.metrics());
 	}
 
 	/** Handlers are resolved by {@link NodeHandler#type()}; a later handler replaces an earlier one of the same type. */
-	public ExecutionService(FlowService flows, ExecutionRepository repository, List<NodeHandler> handlers) {
+	public ExecutionService(FlowService flows, ExecutionRepository repository, List<NodeHandler> handlers,
+			ExecutionMetrics metrics) {
 		this.flows = flows;
 		this.repository = repository;
-		this.recorder = new ExecutionRecorder(repository);
+		this.recorder = new ExecutionRecorder(repository, metrics);
 		handlers.forEach(h -> this.handlers.put(h.type(), h));
 	}
 
@@ -49,7 +53,10 @@ public class ExecutionService {
 	public FlowExecution execute(String tenantId, String flowKey, String userType, String context,
 			Map<String, Object> inputData, String correlationId) {
 		FlowDefinition flow = flows.resolveActive(tenantId, flowKey, userType, context);
-		return run(tenantId, flow, correlationId, inputData, null, null, List.of(), new HashMap<>());
+		var started = Instant.now();
+		FlowExecution done = run(tenantId, flow, correlationId, inputData, null, null, List.of(), new HashMap<>());
+		recorder.executionFinished(done.status().name(), Duration.between(started, Instant.now()));
+		return done;
 	}
 
 	/**

@@ -255,12 +255,30 @@ class ExecutionTest {
 						ran.set(true);
 						return null;
 					}
-				}));
+				}), new MicrometerExecutionMetrics(meters));
 		activate("k-handler", "CH", graph(true, "v1"), List.of());
 		FlowExecution f = startOnly.execute("t", null, "PF", "CH", Map.of(), null);
 		assertTrue(ran.get());
 		assertEquals(ExecutionStatus.FAILED, f.status());
 		assertEquals("UNSUPPORTED_NODE_TYPE", f.errorInfo().get("code"));
+	}
+
+	@Test
+	void executionCounterAndTimersTrackCompletedAndFailed() {
+		double completed = count("COMPLETED"), failed = count("FAILED");
+		activate("k-met-ok", "CMO", graph(true, "v1"), List.of());
+		activate("k-met-bad", "CMB", graph(false, "v1"), List.of());
+		executions.execute("t", null, "PF", "CMO", Map.of("ok", true), null);
+		executions.execute("t", null, "PF", "CMB", Map.of("ok", false), null);
+		assertEquals(completed + 1, count("COMPLETED"));
+		assertEquals(failed + 1, count("FAILED"));
+		assertTrue(meters.get("validation.execution.duration").tag("status", "COMPLETED").timer().count() >= 1);
+		assertTrue(meters.get("validation.node.duration").tag("type", "VALIDATION").timer().count() >= 1);
+	}
+
+	private static double count(String status) {
+		var c = meters.find("validation.execution").tag("status", status).counter();
+		return c == null ? 0 : c.count();
 	}
 
 	@Test

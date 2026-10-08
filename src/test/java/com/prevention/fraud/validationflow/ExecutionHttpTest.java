@@ -71,6 +71,15 @@ class ExecutionHttpTest {
 	}
 
 	@Test
+	void metricsAreExposedBehindAuthentication() throws Exception {
+		runExecution("ka", "metrics-ok");
+		mvc.perform(get("/actuator/metrics/validation.execution")).andExpect(status().isUnauthorized());
+		mvc.perform(get("/actuator/metrics/validation.execution").header("X-API-Key", "ka"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.name").value("validation.execution"))
+				.andExpect(jsonPath("$.availableTags[?(@.tag=='status')].values[*]").value(hasItem("COMPLETED")));
+	}
+
+	@Test
 	void getByIdAndNodesSucceed() throws Exception {
 		String exec = runExecution("ka", "get-ok");
 		mvc.perform(get("/api/v1/executions/" + exec).header("X-API-Key", "ka")).andExpect(status().isOk())

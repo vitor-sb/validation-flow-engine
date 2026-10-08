@@ -41,6 +41,10 @@ public class ValidatorRunner {
 	// without a cap hung validators could exhaust the JVM. Daemon threads so they never block shutdown.
 	private final ThreadPoolExecutor timeoutPool;
 
+	ExecutionMetrics metrics() {
+		return meters;
+	}
+
 	public ValidatorRunner(ExecutionMetrics meters, int maxThreads, int queueCapacity) {
 		this.meters = meters;
 		this.timeoutPool = new ThreadPoolExecutor(maxThreads, maxThreads, 60, TimeUnit.SECONDS,
