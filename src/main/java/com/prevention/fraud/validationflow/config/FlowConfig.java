@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.application.execution.IdempotentExecutionService;
 import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
@@ -23,12 +24,17 @@ class FlowConfig {
 	@Bean
 	ExecutionService executionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
 			io.micrometer.core.instrument.MeterRegistry meters,
-			// must exceed the longest possible execution, or a live run could be taken over
-			@org.springframework.beans.factory.annotation.Value("${app.idempotency.lease:PT1H}") java.time.Duration lease,
 			// caps threads stuck in validators that ignore interrupt; size to expected concurrent timed validators
 			@org.springframework.beans.factory.annotation.Value("${app.validators.max-threads:64}") int maxThreads,
 			@org.springframework.beans.factory.annotation.Value("${app.validators.queue-capacity:128}") int queueCapacity) {
-		return new ExecutionService(flows, repository, registry, meters, lease, maxThreads, queueCapacity);
+		return new ExecutionService(flows, repository, registry, meters, maxThreads, queueCapacity);
+	}
+
+	@Bean
+	IdempotentExecutionService idempotentExecutionService(ExecutionService executions, ExecutionRepository repository,
+			// must exceed the longest possible execution, or a live run could be taken over
+			@org.springframework.beans.factory.annotation.Value("${app.idempotency.lease:PT1H}") java.time.Duration lease) {
+		return new IdempotentExecutionService(executions, repository, lease);
 	}
 
 	@Bean

@@ -26,6 +26,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.application.execution.IdempotentExecutionService;
 import com.prevention.fraud.validationflow.config.security.TenantPrincipal;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
@@ -57,8 +58,11 @@ class ExecutionController {
 
 	private final ExecutionService service;
 
-	ExecutionController(ExecutionService service) {
+	private final IdempotentExecutionService idempotent;
+
+	ExecutionController(ExecutionService service, IdempotentExecutionService idempotent) {
 		this.service = service;
+		this.idempotent = idempotent;
 	}
 
 	record Page(List<ExecutionResponse> items, int page, int size, long total) {
@@ -74,7 +78,7 @@ class ExecutionController {
 			@Parameter(description = "Optional idempotency key (max 255 chars of [A-Za-z0-9._:-])", example = "order-42") @RequestHeader(name = "Idempotency-Key", required = false) @Pattern(regexp = "[A-Za-z0-9._:-]{0,255}", message = "must be at most 255 chars of [A-Za-z0-9._:-]") String idempotencyKey,
 			@Valid @RequestBody StartRequest r) {
 		if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-			var o = service.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
+			var o = idempotent.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
 					r.context(), r.inputData(), r.correlationId());
 			var created = ResponseEntity.status(HttpStatus.CREATED);
 			if (o.replayed()) {

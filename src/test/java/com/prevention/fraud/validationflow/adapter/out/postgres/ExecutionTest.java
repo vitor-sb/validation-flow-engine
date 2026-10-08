@@ -184,7 +184,7 @@ class ExecutionTest {
 				leakingFailure("leak-domain", true), leakingFailure("leak-runtime", false)));
 		flows = new FlowService(new JdbcFlowRepository(jdbc, json), new GraphValidator(registry::contains));
 		var exRepo = new JdbcExecutionRepository(jdbc, json);
-		executions = new ExecutionService(flows, exRepo, registry, meters, java.time.Duration.ofHours(1), 64, 64);
+		executions = new ExecutionService(flows, exRepo, registry, meters, 64, 64);
 	}
 
 	static UUID activate(String key, String ctx, Map<String, Object> g, List<InputField> contract) {
@@ -387,7 +387,7 @@ class ExecutionTest {
 		var ownFlows = new FlowService(new JdbcFlowRepository(jdbc, JsonMapper.builder().build()),
 				new GraphValidator(registry::contains));
 		var small = new ExecutionService(ownFlows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
-				registry, meters, java.time.Duration.ofHours(1), 2, 1);
+				registry, meters, 2, 1);
 		var g = singleNodeGraph("stubborn", Map.of("timeout", "PT0.05S"));
 		ownFlows.activate("t", ownFlows.createDraft("t", "t", new FlowService.CreateFlow("k-stub", "PF", "CSTUB", "d", null,
 				g, List.of(), null)).id());
