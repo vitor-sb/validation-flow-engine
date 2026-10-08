@@ -20,8 +20,8 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 | 13 | Testes de grafo, seleção, transições, versionamento, execução | OK |
 | 14 | Teste de carga inicial | OK (US-018) |
 | 15 | Multi-tenancy sem colisão | OK (US-016) |
-| 16 | Execução registra tenantId, contexto e versão | NÃO VERIFICADO |
-| 17 | Transição por papel/canal/grupo/atributo | NÃO VERIFICADO (provável OK via US-009) |
+| 16 | Execução registra tenantId, contexto e versão | OK (`MultiTenancyTest` lê `tenant_id`, `flow_version` e `context_data` de `flow_execution`) |
+| 17 | Transição por papel/canal/grupo/atributo | OK (`ConditionEvaluatorTest` por operador; `ExecutionTest` avalia `inputData.groups`/`inputData.rural` e audita `TRANSITION_EVALUATED`) |
 | 18 | Grupos de documentos | OK (US-017) |
 
 ## Adiado por decisão (fases 3 a 5 do v0.1)
