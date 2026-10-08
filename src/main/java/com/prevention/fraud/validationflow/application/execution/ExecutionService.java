@@ -4,7 +4,6 @@ import com.prevention.fraud.validationflow.application.execution.ports.Execution
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
-import com.prevention.fraud.validationflow.application.validator.ValidatorException;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import java.time.Instant;
@@ -12,16 +11,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import com.prevention.fraud.validationflow.domain.execution.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.execution.DocumentGroups;
@@ -36,14 +27,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
-import io.micrometer.core.instrument.MeterRegistry;
 
 public class ExecutionService {
 
 	private static final Logger log = LoggerFactory.getLogger(ExecutionService.class);
 
 	/** Persisted instead of the message of unexpected exceptions, which may carry input data. */
-	private static final String UNEXPECTED = "unexpected error";
+	static final String UNEXPECTED = "unexpected error";
 
 	private final FlowService flows;
 
@@ -51,25 +41,14 @@ public class ExecutionService {
 
 	private final ValidatorRegistry registry;
 
-	private final MeterRegistry meters;
-
-	// only used when a node has config.timeout. Bounded: a validator that ignores interrupt keeps its thread, so
-	// without a cap hung validators could exhaust the JVM. Daemon threads so they never block shutdown.
-	private final ThreadPoolExecutor timeoutPool;
+	private final ValidatorRunner runner;
 
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
-			MeterRegistry meters, int maxThreads, int queueCapacity) {
-		this.timeoutPool = new ThreadPoolExecutor(maxThreads, maxThreads, 60, TimeUnit.SECONDS,
-				new ArrayBlockingQueue<>(queueCapacity), r -> {
-					Thread t = new Thread(r, "validator-timeout");
-					t.setDaemon(true);
-					return t;
-				});
-		timeoutPool.allowCoreThreadTimeOut(true);
+			ValidatorRunner runner) {
 		this.flows = flows;
 		this.repository = repository;
 		this.registry = registry;
-		this.meters = meters;
+		this.runner = runner;
 	}
 
 	/** Synchronous: resolves the active flow, validates the input contract, walks the snapshot graph, returns the final state. */
@@ -151,7 +130,9 @@ public class ExecutionService {
 					if (v == null) {
 						return save(ex.fail(ctx, "VALIDATOR_NOT_FOUND", "validator not registered at node " + id));
 					}
-					Attempt a = runWithRetry(ex, id, type, v, ctx, config);
+					String nodeId = id;
+					var a = runner.run(nodeId, v, ctx, config,
+							(att, st, out, err, t) -> recordNode(ex, nodeId, type, att, st, out, err, ctx, t));
 					if (a.error() != null) {
 						return save(ex.fail(ctx, (String) a.error().get("code"), (String) a.error().get("message"),
 								(Boolean) a.error().get("retryable"), Map.of("nodeId", id, "attempts", a.attempts())));
@@ -273,91 +254,6 @@ public class ExecutionService {
 		return path.startsWith("$.") ? path.substring(2) : path.substring(1);
 	}
 
-	record Attempt(ValidatorStrategy.ValidationResult result, Map<String, Object> error, int attempts) {
-	}
-
-	/** Runs the validator up to retryPolicy.maxAttempts times, one node_execution row per attempt. */
-	@SuppressWarnings("unchecked")
-	private Attempt runWithRetry(FlowExecution ex, String nodeId, String type, ValidatorStrategy v,
-			Map<String, Object> ctx, Map<String, Object> config) {
-		Map<String, Object> policy = (Map<String, Object>) config.getOrDefault("retryPolicy", Map.of());
-		int max = policy.get("maxAttempts") instanceof Integer n ? n : 1;
-		boolean exponential = "EXPONENTIAL".equals(policy.get("backoff"));
-		Duration delay = Duration.parse((String) policy.getOrDefault("delay", "PT0.1S"));
-		Duration timeout = config.get("timeout") == null ? null : Duration.parse((String) config.get("timeout"));
-		for (int attempt = 1;; attempt++) {
-			String status = "FAILED";
-			Map<String, Object> error;
-			Instant started = Instant.now();
-			try {
-				var r = call(v, ctx, config, timeout);
-				recordNode(ex, nodeId, type, attempt, r.success() ? "COMPLETED" : "FAILED",
-						r.output() == null ? Map.of() : r.output(), null, ctx, started);
-				return new Attempt(r, null, attempt);
-			}
-			catch (TimeoutException e) {
-				meters.counter("validation.node.timeout", "validator", v.key()).increment();
-				status = "TIMED_OUT";
-				error = error("NODE_TIMEOUT", "node " + nodeId + " exceeded " + timeout, true);
-			}
-			catch (ValidatorException e) {
-				error = error(e.code(), String.valueOf(e.getMessage()), e.retryable());
-			}
-			catch (RuntimeException e) {
-				log.warn("validator error node={} class={} message={}", nodeId, e.getClass().getName(),
-						redact(e.getMessage(), ctx));
-				error = new LinkedHashMap<>(error("VALIDATOR_ERROR", UNEXPECTED, false));
-				error.put("exception", e.getClass().getName());
-			}
-			recordNode(ex, nodeId, type, attempt, status, Map.of(), error, ctx, started);
-			meters.counter("validation.node.error", "validator", v.key(), "code", (String) error.get("code")).increment();
-			if (!(Boolean) error.get("retryable") || attempt >= max) {
-				return new Attempt(null, error, attempt);
-			}
-			meters.counter("validation.node.retry", "validator", v.key()).increment();
-			// exponent capped so the shift/multiply can't overflow; sleep never exceeds the validator's max delay
-			long ms = Math.min(delay.toMillis() * (exponential ? 1L << Math.min(attempt - 1, 20) : 1L),
-					GraphValidator.DEFAULT_MAX_DELAY.toMillis());
-			try {
-				Thread.sleep(ms);
-			}
-			catch (InterruptedException ie) {
-				Thread.currentThread().interrupt();
-				return new Attempt(null, error("INTERRUPTED", "interrupted while backing off", false), attempt);
-			}
-		}
-	}
-
-	private ValidatorStrategy.ValidationResult call(ValidatorStrategy v, Map<String, Object> ctx,
-			Map<String, Object> config, Duration timeout) throws TimeoutException {
-		var input = new ValidatorStrategy.ValidationInput(Map.copyOf(ctx), config);
-		if (timeout == null) {
-			return v.execute(input);
-		}
-		java.util.concurrent.Future<ValidatorStrategy.ValidationResult> f;
-		try {
-			f = timeoutPool.submit(() -> v.execute(input));
-		}
-		catch (RejectedExecutionException e) {
-			meters.counter("validation.node.rejected", "validator", v.key()).increment();
-			throw new ValidatorException("NODE_REJECTED", "validator capacity exhausted, try again later", true);
-		}
-		try {
-			return f.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
-		}
-		catch (TimeoutException e) {
-			f.cancel(true);
-			throw e;
-		}
-		catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			throw new IllegalStateException(e);
-		}
-		catch (ExecutionException e) {
-			throw e.getCause() instanceof RuntimeException re ? re : new IllegalStateException(e.getCause());
-		}
-	}
-
 	/** Persists the attempt and logs it; payloads only appear in logs masked. */
 	@SuppressWarnings("unchecked")
 	private void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
@@ -418,7 +314,7 @@ public class ExecutionService {
 		return LogMasker.isCredential(String.valueOf(cond.get("field"))) ? "***" : observed;
 	}
 
-	private static Map<String, Object> error(String code, String message, boolean retryable) {
+	static Map<String, Object> error(String code, String message, boolean retryable) {
 		return Map.of("code", code, "message", message, "retryable", retryable);
 	}
 

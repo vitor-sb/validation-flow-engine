@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.execution.IdempotentExecutionService;
+import com.prevention.fraud.validationflow.application.execution.ValidatorRunner;
 import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
@@ -27,7 +28,7 @@ class FlowConfig {
 			// caps threads stuck in validators that ignore interrupt; size to expected concurrent timed validators
 			@org.springframework.beans.factory.annotation.Value("${app.validators.max-threads:64}") int maxThreads,
 			@org.springframework.beans.factory.annotation.Value("${app.validators.queue-capacity:128}") int queueCapacity) {
-		return new ExecutionService(flows, repository, registry, meters, maxThreads, queueCapacity);
+		return new ExecutionService(flows, repository, registry, new ValidatorRunner(meters, maxThreads, queueCapacity));
 	}
 
 	@Bean
