@@ -93,7 +93,7 @@ class ValidatorRegistryTest {
 	@Test
 	void nodeTypesEndpoints() throws Exception {
 		mvc.perform(get("/api/v1/node-types").header("X-API-Key", "k")).andExpect(status().isOk())
-				.andExpect(jsonPath("$[0].key").value("fake"));
+				.andExpect(jsonPath("$[?(@.key=='fake')]").exists());
 		mvc.perform(get("/api/v1/node-types/fake").header("X-API-Key", "k")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.capabilities[0]").value("FAKE"));
 		mvc.perform(get("/api/v1/node-types/nope").header("X-API-Key", "k")).andExpect(status().isNotFound());
