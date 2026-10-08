@@ -1,6 +1,6 @@
 package com.prevention.fraud.validationflow;
 
-import com.prevention.fraud.validationflow.application.execution.IdempotencyRetentionService;
+import com.prevention.fraud.validationflow.application.execution.idempotency.IdempotencyRetentionService;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -232,11 +232,11 @@ class ExecutionHttpTest {
 				+ "('ta', 'ret-orphan', 'x', now() - interval '2 days', now() - interval '1 minute')");
 
 		// recent keys survive
-		new com.prevention.fraud.validationflow.application.execution.IdempotencyRetentionService(idempotency, java.time.Duration.ofDays(1)).purge();
+		new com.prevention.fraud.validationflow.application.execution.idempotency.IdempotencyRetentionService(idempotency, java.time.Duration.ofDays(1)).purge();
 		org.junit.jupiter.api.Assertions.assertEquals(1, count("ret-1"));
 
 		// everything older than "now" goes, except the live reservation
-		new com.prevention.fraud.validationflow.application.execution.IdempotencyRetentionService(idempotency, java.time.Duration.ZERO).purge();
+		new com.prevention.fraud.validationflow.application.execution.idempotency.IdempotencyRetentionService(idempotency, java.time.Duration.ZERO).purge();
 		org.junit.jupiter.api.Assertions.assertEquals(0, count("ret-1"));
 		org.junit.jupiter.api.Assertions.assertEquals(0, count("ret-orphan"));
 		org.junit.jupiter.api.Assertions.assertEquals(1, count("ret-live"));

@@ -1,4 +1,6 @@
-package com.prevention.fraud.validationflow.application.execution;
+package com.prevention.fraud.validationflow.application.execution.node;
+
+import com.prevention.fraud.validationflow.application.execution.node.ValidatorRunner;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -83,7 +83,7 @@ class ArchitectureTest {
 			.should().beInterfaces();
 
 	@ArchTest
-	static final ArchRule handlersAreNamedAsHandlers = classes().that().implement(BASE + ".application.execution.NodeHandler")
+	static final ArchRule handlersAreNamedAsHandlers = classes().that().implement(BASE + ".application.execution.node.NodeHandler")
 			.should().haveNameMatching(".*(Handler|NodeHandlers\\$\\w+)");
 
 	@ArchTest

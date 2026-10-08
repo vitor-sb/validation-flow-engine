@@ -1,5 +1,6 @@
-package com.prevention.fraud.validationflow.application.execution;
+package com.prevention.fraud.validationflow.application.execution.node;
 
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import com.prevention.fraud.validationflow.domain.flow.DocumentGroups;
@@ -10,12 +11,12 @@ import java.util.List;
 import java.util.Map;
 
 /** The built-in handlers for START, DECISION, VALIDATION, SUB_FLOW and END. */
-final class NodeHandlers {
+public final class NodeHandlers {
 
 	private NodeHandlers() {
 	}
 
-	static List<NodeHandler> defaults(ValidatorRegistry registry, ValidatorRunner runner, SubFlowRunner subFlows) {
+	public static List<NodeHandler> defaults(ValidatorRegistry registry, ValidatorRunner runner, SubFlowRunner subFlows) {
 		return List.of(new Start(), new Decision(), new Validation(registry, runner), new SubFlow(subFlows), new End());
 	}
 
@@ -23,7 +24,7 @@ final class NodeHandlers {
 		s.host().recorder().recordNode(s.ex(), s.nodeId(), s.type(), 1, "COMPLETED", out, null, s.ctx(), started);
 	}
 
-	record Start() implements NodeHandler {
+	public record Start() implements NodeHandler {
 
 		public String type() {
 			return "START";
@@ -36,7 +37,7 @@ final class NodeHandlers {
 
 	}
 
-	record Decision() implements NodeHandler {
+	public record Decision() implements NodeHandler {
 
 		public String type() {
 			return "DECISION";
@@ -54,7 +55,7 @@ final class NodeHandlers {
 
 	}
 
-	record Validation(ValidatorRegistry registry, ValidatorRunner runner) implements NodeHandler {
+	public record Validation(ValidatorRegistry registry, ValidatorRunner runner) implements NodeHandler {
 
 		public String type() {
 			return "VALIDATION";
@@ -80,7 +81,7 @@ final class NodeHandlers {
 
 	}
 
-	record SubFlow(SubFlowRunner subFlows) implements NodeHandler {
+	public record SubFlow(SubFlowRunner subFlows) implements NodeHandler {
 
 		public String type() {
 			return "SUB_FLOW";
@@ -101,7 +102,7 @@ final class NodeHandlers {
 
 	}
 
-	record End() implements NodeHandler {
+	public record End() implements NodeHandler {
 
 		public String type() {
 			return "END";

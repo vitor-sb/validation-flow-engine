@@ -1,5 +1,6 @@
-package com.prevention.fraud.validationflow.application.execution;
+package com.prevention.fraud.validationflow.application.execution.node;
 
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.domain.flow.ConditionEvaluator;
@@ -14,11 +15,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Runs the child flow of a SUB_FLOW node: cycle/depth checks, input mapping and output mapping. */
-class SubFlowRunner {
+public class SubFlowRunner {
 
 	/** Runs a flow as a child; implemented by {@link ExecutionService}. */
 	@FunctionalInterface
-	interface ChildRun {
+	public interface ChildRun {
 
 		FlowExecution run(String tenantId, FlowDefinition flow, String correlationId, Map<String, Object> input,
 				UUID parentId, String parentNodeId, List<String> chain, Map<String, Object> ctx);
@@ -26,12 +27,12 @@ class SubFlowRunner {
 	}
 
 	/** Either a failure ({@code code} set, with {@code details}) or the mapped {@code output}. */
-	record Outcome(String code, String message, Map<String, Object> details, Map<String, Object> output) {
+	public record Outcome(String code, String message, Map<String, Object> details, Map<String, Object> output) {
 	}
 
 	private final FlowService flows;
 
-	SubFlowRunner(FlowService flows) {
+	public SubFlowRunner(FlowService flows) {
 		this.flows = flows;
 	}
 
@@ -40,7 +41,7 @@ class SubFlowRunner {
 	 * the child runs at level {@code chain.size()} (root = 0) and may not exceed the node's maxDepth (default
 	 * {@link GraphValidator#MAX_SUB_FLOW_DEPTH}).
 	 */
-	Outcome run(FlowExecution ex, String nodeId, NodeConfig config, Map<String, Object> ctx,
+	public Outcome run(FlowExecution ex, String nodeId, NodeConfig config, Map<String, Object> ctx,
 			List<String> chain, ChildRun childRun) {
 		String childKey = config.flowKey();
 		int limit = config.maxDepth() != null ? config.maxDepth() : GraphValidator.MAX_SUB_FLOW_DEPTH;

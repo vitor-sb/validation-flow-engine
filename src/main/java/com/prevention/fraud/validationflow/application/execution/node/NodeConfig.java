@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.application.execution;
+package com.prevention.fraud.validationflow.application.execution.node;
 
 import java.time.Duration;
 import java.util.List;
@@ -16,7 +16,7 @@ public record NodeConfig(Duration timeout, String validatorType, RetryPolicy ret
 	public record RetryPolicy(int maxAttempts, Duration delay, boolean backoffExponential) {
 	}
 
-	static NodeConfig from(Map<String, Object> raw) {
+	public static NodeConfig from(Map<String, Object> raw) {
 		Map<String, Object> policy = Maps.of(raw.get("retryPolicy"));
 		RetryPolicy retry = new RetryPolicy(policy.get("maxAttempts") instanceof Integer n ? n : 1,
 				Duration.parse((String) policy.getOrDefault("delay", "PT0.1S")),

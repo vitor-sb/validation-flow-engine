@@ -26,7 +26,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
-import com.prevention.fraud.validationflow.application.execution.IdempotentExecutionService;
+import com.prevention.fraud.validationflow.application.execution.idempotency.IdempotentExecutionService;
 import com.prevention.fraud.validationflow.config.security.TenantPrincipal;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;

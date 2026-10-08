@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.application.execution;
+package com.prevention.fraud.validationflow.application.execution.idempotency;
 
 import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import java.time.Duration;

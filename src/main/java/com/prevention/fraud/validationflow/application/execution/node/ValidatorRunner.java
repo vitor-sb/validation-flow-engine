@@ -1,5 +1,6 @@
-package com.prevention.fraud.validationflow.application.execution;
+package com.prevention.fraud.validationflow.application.execution.node;
 
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionMetrics;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
 import com.prevention.fraud.validationflow.application.validator.ValidatorException;
@@ -32,7 +33,7 @@ public class ValidatorRunner {
 
 	}
 
-	record Attempt(ValidatorStrategy.ValidationResult result, Map<String, Object> error, int attempts) {
+	public record Attempt(ValidatorStrategy.ValidationResult result, Map<String, Object> error, int attempts) {
 	}
 
 	private final ExecutionMetrics meters;
@@ -41,7 +42,7 @@ public class ValidatorRunner {
 	// without a cap hung validators could exhaust the JVM. Daemon threads so they never block shutdown.
 	private final ThreadPoolExecutor timeoutPool;
 
-	ExecutionMetrics metrics() {
+	public ExecutionMetrics metrics() {
 		return meters;
 	}
 
@@ -57,7 +58,7 @@ public class ValidatorRunner {
 	}
 
 	/** Runs the validator up to retryPolicy.maxAttempts times. */
-	Attempt run(String nodeId, ValidatorStrategy v, Map<String, Object> ctx, NodeConfig config,
+	public Attempt run(String nodeId, ValidatorStrategy v, Map<String, Object> ctx, NodeConfig config,
 			AttemptRecorder recorder) {
 		int max = config.retryPolicy().maxAttempts();
 		Duration timeout = config.timeout();
@@ -115,7 +116,7 @@ public class ValidatorRunner {
 	}
 
 	/** Exponent capped so the shift/multiply can't overflow; never exceeds the validator's max delay. */
-	static long backoffMillis(Duration delay, boolean exponential, int attempt) {
+	public static long backoffMillis(Duration delay, boolean exponential, int attempt) {
 		return Math.min(delay.toMillis() * (exponential ? 1L << Math.min(attempt - 1, 20) : 1L),
 				GraphValidator.DEFAULT_MAX_DELAY.toMillis());
 	}
