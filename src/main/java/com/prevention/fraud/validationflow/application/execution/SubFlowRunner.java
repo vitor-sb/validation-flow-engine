@@ -2,7 +2,7 @@ package com.prevention.fraud.validationflow.application.execution;
 
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
-import com.prevention.fraud.validationflow.domain.execution.ConditionEvaluator;
+import com.prevention.fraud.validationflow.domain.flow.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;

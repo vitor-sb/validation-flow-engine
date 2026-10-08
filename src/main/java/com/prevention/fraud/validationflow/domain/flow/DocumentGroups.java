@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.domain.execution;
+package com.prevention.fraud.validationflow.domain.flow;
 
 import java.util.ArrayList;
 import java.util.HashSet;

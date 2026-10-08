@@ -3,7 +3,6 @@ package com.prevention.fraud.validationflow.domain.flow;
 import static com.prevention.fraud.validationflow.domain.flow.GraphValidator.list;
 import static com.prevention.fraud.validationflow.domain.flow.GraphValidator.map;
 
-import com.prevention.fraud.validationflow.domain.execution.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.flow.GraphValidator.GraphError;
 import java.time.Duration;
 import java.util.List;

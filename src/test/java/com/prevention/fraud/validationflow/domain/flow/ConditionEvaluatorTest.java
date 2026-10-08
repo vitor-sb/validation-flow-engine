@@ -1,4 +1,4 @@
-package com.prevention.fraud.validationflow.domain.execution;
+package com.prevention.fraud.validationflow.domain.flow;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

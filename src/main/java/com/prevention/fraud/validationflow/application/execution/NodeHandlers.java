@@ -2,7 +2,7 @@ package com.prevention.fraud.validationflow.application.execution;
 
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
-import com.prevention.fraud.validationflow.domain.execution.DocumentGroups;
+import com.prevention.fraud.validationflow.domain.flow.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import java.time.Instant;
 import java.util.LinkedHashMap;

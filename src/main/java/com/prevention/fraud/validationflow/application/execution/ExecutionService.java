@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.prevention.fraud.validationflow.domain.execution.ConditionEvaluator;
+import com.prevention.fraud.validationflow.domain.flow.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
