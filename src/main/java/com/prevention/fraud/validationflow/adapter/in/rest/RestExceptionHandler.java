@@ -5,7 +5,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.prevention.fraud.validationflow.application.FlowException;
+import com.prevention.fraud.validationflow.application.flow.FlowException;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpHeaders;

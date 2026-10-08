@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
-import com.prevention.fraud.validationflow.application.ValidatorStrategy;
+import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 
 /** Fake validator for loadtest/ only; never active without the {@code loadtest} profile. */
 @Configuration

@@ -4,13 +4,13 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import com.prevention.fraud.validationflow.application.ExecutionRepository;
-import com.prevention.fraud.validationflow.application.ExecutionService;
-import com.prevention.fraud.validationflow.application.FlowRepository;
-import com.prevention.fraud.validationflow.application.FlowService;
-import com.prevention.fraud.validationflow.application.ValidatorRegistry;
-import com.prevention.fraud.validationflow.application.ValidatorStrategy;
-import com.prevention.fraud.validationflow.domain.GraphValidator;
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
+import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
+import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
+import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
 
 @Configuration
 class FlowConfig {

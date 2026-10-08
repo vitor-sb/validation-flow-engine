@@ -12,10 +12,10 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Repository;
 
-import com.prevention.fraud.validationflow.application.FlowRepository;
-import com.prevention.fraud.validationflow.domain.FlowDefinition;
-import com.prevention.fraud.validationflow.domain.FlowStatus;
-import com.prevention.fraud.validationflow.domain.InputField;
+import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
+import com.prevention.fraud.validationflow.domain.flow.InputField;
 
 import tools.jackson.core.type.TypeReference;
 

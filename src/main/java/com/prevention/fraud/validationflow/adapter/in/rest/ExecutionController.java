@@ -25,10 +25,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-import com.prevention.fraud.validationflow.application.ExecutionService;
-import com.prevention.fraud.validationflow.config.TenantPrincipal;
-import com.prevention.fraud.validationflow.domain.FlowExecution;
-import com.prevention.fraud.validationflow.domain.NodeExecution;
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.config.security.TenantPrincipal;
+import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;

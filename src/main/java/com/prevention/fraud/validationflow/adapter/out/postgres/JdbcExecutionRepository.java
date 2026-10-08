@@ -9,10 +9,10 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import com.prevention.fraud.validationflow.application.ExecutionRepository;
-import com.prevention.fraud.validationflow.domain.ExecutionStatus;
-import com.prevention.fraud.validationflow.domain.FlowExecution;
-import com.prevention.fraud.validationflow.domain.NodeExecution;
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
+import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;

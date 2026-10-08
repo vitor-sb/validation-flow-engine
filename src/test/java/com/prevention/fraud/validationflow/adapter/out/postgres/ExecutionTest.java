@@ -1,5 +1,7 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
+import com.prevention.fraud.validationflow.application.execution.RecoveryService;
+import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,17 +15,17 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import com.prevention.fraud.validationflow.application.ExecutionService;
-import com.prevention.fraud.validationflow.application.FlowException;
-import com.prevention.fraud.validationflow.application.FlowService;
-import com.prevention.fraud.validationflow.application.ValidatorRegistry;
-import com.prevention.fraud.validationflow.application.ValidatorException;
-import com.prevention.fraud.validationflow.application.ValidatorStrategy;
+import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.application.flow.FlowException;
+import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
+import com.prevention.fraud.validationflow.application.validator.ValidatorException;
+import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import com.prevention.fraud.validationflow.domain.ExecutionStatus;
-import com.prevention.fraud.validationflow.domain.FlowExecution;
-import com.prevention.fraud.validationflow.domain.GraphValidator;
-import com.prevention.fraud.validationflow.domain.InputField;
+import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
+import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
+import com.prevention.fraud.validationflow.domain.flow.InputField;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -568,7 +570,7 @@ class ExecutionTest {
 		jdbc.update("INSERT INTO idempotency_key (tenant_id, idempotency_key, request_hash, locked_until) "
 				+ "VALUES ('t', 'orphan-old', 'h', now() - interval '1 minute'), ('t', 'orphan-live', 'h', now() + interval '1 hour')");
 
-		assertEquals(2, new com.prevention.fraud.validationflow.application.RecoveryService(repo,
+		assertEquals(2, new com.prevention.fraud.validationflow.application.execution.RecoveryService(repo,
 				java.time.Duration.ofHours(1)).recover());
 
 		for (var ex : List.of(staleT, staleU)) {
@@ -591,7 +593,7 @@ class ExecutionTest {
 		assertEquals(ExecutionStatus.COMPLETED, executions.get("t", late.id()).status());
 	}
 
-	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.FlowDefinition flow,
+	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.flow.FlowDefinition flow,
 			java.time.Instant startedAt) {
 		var p = FlowExecution.pending(tenant, flow, null, Map.of());
 		var r = new FlowExecution(p.id(), tenant, p.flowDefinitionId(), p.flowKey(), p.flowVersion(), p.snapshot(), null,

@@ -17,8 +17,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
-import com.prevention.fraud.validationflow.application.ValidatorRegistry;
-import com.prevention.fraud.validationflow.application.ValidatorStrategy;
+import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
+import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 
 @RestController
 @RequestMapping("/api/v1/node-types")
