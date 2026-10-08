@@ -1,10 +1,12 @@
 package com.prevention.fraud.validationflow.config;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import io.swagger.v3.core.converter.ModelConverters;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.examples.Example;
@@ -17,6 +19,8 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
 import org.springdoc.core.customizers.OpenApiCustomizer;
+
+import com.prevention.fraud.validationflow.adapter.in.rest.ErrorResponse;
 
 /**
  * OpenAPI metadata. The committed {@code openapi.yaml} is generated from this + the controller annotations
@@ -51,8 +55,8 @@ class OpenApiConfig {
 	OpenApiCustomizer errorResponses() {
 		return api -> {
 			var c = api.getComponents();
-			io.swagger.v3.core.converter.ModelConverters.getInstance()
-					.readAll(com.prevention.fraud.validationflow.adapter.in.rest.ErrorResponse.class).forEach(c::addSchemas);
+			ModelConverters.getInstance()
+					.readAll(ErrorResponse.class).forEach(c::addSchemas);
 			c.addResponses("BadRequest", error("Invalid request (VALIDATION_ERROR, MALFORMED_REQUEST, BAD_REQUEST, INVALID_INPUT).",
 					"VALIDATION_ERROR", "displayName: must not be blank"));
 			c.addResponses("Unauthorized", error("Missing or invalid `X-API-Key`.", "UNAUTHORIZED", "authentication required"));
@@ -78,7 +82,7 @@ class OpenApiConfig {
 	}
 
 	private static ApiResponse error(String description, String code, String detail) {
-		var example = new Example().value(java.util.Map.of("code", code, "retryable", false, "details", List.of(detail)));
+		var example = new Example().value(Map.of("code", code, "retryable", false, "details", List.of(detail)));
 		return new ApiResponse().description(description).content(new Content().addMediaType("application/json",
 				new MediaType().schema(new Schema<>().$ref("#/components/schemas/ErrorResponse")).addExamples("default", example)));
 	}
