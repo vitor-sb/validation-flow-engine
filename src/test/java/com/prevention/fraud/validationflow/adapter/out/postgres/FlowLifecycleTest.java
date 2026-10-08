@@ -10,7 +10,7 @@ import java.util.concurrent.Executors;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.testcontainers.junit.jupiter.Container;
@@ -19,10 +19,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
 import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
 import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
-
-import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,7 +33,7 @@ class FlowLifecycleTest {
 	@Container
 	static PostgreSQLContainer pg = new PostgreSQLContainer("postgres:16");
 
-	static JdbcFlowRepository repo;
+	static FlowRepository repo;
 
 	static FlowService service;
 
@@ -45,9 +44,7 @@ class FlowLifecycleTest {
 	@BeforeAll
 	static void setUp() {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
-		repo = new JdbcFlowRepository(
-				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
-				JsonMapper.builder().build());
+		repo = JpaTestContext.flowRepository(JpaTestContext.start(pg));
 		service = new FlowService(repo, new GraphValidator(t -> false));
 	}
 
@@ -98,7 +95,7 @@ class FlowLifecycleTest {
 			try {
 				return repo.activate("c", f.id());
 			}
-			catch (DuplicateKeyException e) {
+			catch (DataIntegrityViolationException e) {
 				return false;
 			}
 		}).toList();
@@ -149,15 +146,9 @@ class FlowLifecycleTest {
 	void moreThanOneActiveForSelectorIsInvalidConfigurationWithoutTieBreak() {
 		var one = service.createDraft("amb", "amb", cmd("a1", "AC"));
 		var two = service.createDraft("amb", "amb", cmd("a2", "AC"));
-		var svc = new FlowService(new JdbcFlowRepository(
-				new JdbcTemplate(new DriverManagerDataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())),
-				JsonMapper.builder().build()) {
-			@Override
-			public java.util.List<com.prevention.fraud.validationflow.domain.flow.FlowDefinition> findActive(String t,
-					String k, String u, String c) {
-				return java.util.List.of(one, two);
-			}
-		}, new GraphValidator(t -> false));
+		var ambiguous = org.mockito.Mockito.mock(FlowRepository.class);
+		org.mockito.Mockito.when(ambiguous.findActive("amb", null, "PF", "AC")).thenReturn(java.util.List.of(one, two));
+		var svc = new FlowService(ambiguous, new GraphValidator(t -> false));
 		assertEquals(FlowException.Kind.INVALID_CONFIGURATION, assertThrows(FlowException.class,
 				() -> svc.resolveActive("amb", null, "PF", "AC")).kind());
 	}

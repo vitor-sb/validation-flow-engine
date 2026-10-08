@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
 				+ "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
+				+ "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration,"
 				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
 		"app.security.api-keys[0].key=k", "app.security.api-keys[0].tenant-id=t1",
 		"app.security.api-keys[0].scopes=flow:write,flow:activate,flow:read,validation:read,validation:execute"
@@ -39,6 +40,9 @@ class ErrorResponseTest {
 
 	@MockitoBean
 	ExecutionRepository executions;
+
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
 
 	private static void assertErrorResponse(ResultActions r, int status, String code) throws Exception {
 		r.andExpect(status().is(status)).andExpect(jsonPath("$.code").value(code))

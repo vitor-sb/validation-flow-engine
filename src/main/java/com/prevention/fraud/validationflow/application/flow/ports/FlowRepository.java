@@ -34,7 +34,7 @@ public interface FlowRepository {
 	/**
 	 * In one transaction archives the tenant's ACTIVE version of the same (userType, context) and activates
 	 * this DRAFT. False when the flow is no longer a DRAFT; a concurrent activation of the same selector
-	 * surfaces as DuplicateKeyException.
+	 * surfaces as DataIntegrityViolationException.
 	 */
 	boolean activate(String tenantId, UUID id);
 

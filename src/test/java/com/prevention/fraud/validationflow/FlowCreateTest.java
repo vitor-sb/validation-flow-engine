@@ -26,6 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
 				+ "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
+				+ "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration,"
 				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
 		"app.security.api-keys[0].key=k", "app.security.api-keys[0].tenant-id=t1",
 		"app.security.api-keys[0].scopes=flow:write,flow:activate,flow:read"
@@ -41,6 +42,9 @@ class FlowCreateTest {
 
 	@MockitoBean
 	com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository executionRepository;
+
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
 
 	static final String VALID = """
 			{"flowKey":"kyc","userType":"PF","context":"ONBOARDING","displayName":"KYC",
@@ -72,6 +76,21 @@ class FlowCreateTest {
 		when(repository.save(any())).thenThrow(new DuplicateKeyException("flow_definition_tenant_id_flow_key_version_key"));
 		mvc.perform(post("/api/v1/flows").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
 				.content(VALID)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONFLICT"));
+	}
+
+	@Test
+	void jpaUniqueViolationReturns409ButOtherIntegrityErrorsReturn500() throws Exception {
+		var unique = new org.springframework.dao.DataIntegrityViolationException("x",
+				new java.sql.SQLException("duplicate key", "23505"));
+		when(repository.save(any())).thenThrow(unique);
+		mvc.perform(post("/api/v1/flows").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
+				.content(VALID)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONFLICT"));
+		var notNull = new org.springframework.dao.DataIntegrityViolationException("x",
+				new java.sql.SQLException("null value", "23502"));
+		org.mockito.Mockito.doThrow(notNull).when(repository).save(any());
+		mvc.perform(post("/api/v1/flows").header("X-API-Key", "k").contentType(MediaType.APPLICATION_JSON)
+				.content(VALID)).andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
 	}
 
 	@Test

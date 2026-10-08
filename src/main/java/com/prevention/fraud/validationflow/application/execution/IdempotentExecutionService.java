@@ -1,6 +1,6 @@
 package com.prevention.fraud.validationflow.application.execution;
 
-import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
+import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import java.nio.charset.StandardCharsets;
@@ -18,11 +18,11 @@ public class IdempotentExecutionService {
 
 	private final ExecutionService executions;
 
-	private final ExecutionRepository repository;
+	private final IdempotencyRepository repository;
 
 	private final Duration lease;
 
-	public IdempotentExecutionService(ExecutionService executions, ExecutionRepository repository, Duration lease) {
+	public IdempotentExecutionService(ExecutionService executions, IdempotencyRepository repository, Duration lease) {
 		this.executions = executions;
 		this.repository = repository;
 		this.lease = lease;

@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
 		"spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,"
 				+ "org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration,"
+				+ "org.springframework.boot.data.jpa.autoconfigure.DataJpaRepositoriesAutoConfiguration,"
 				+ "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
 		"app.security.api-keys[0].key=exec-key", "app.security.api-keys[0].tenant-id=t1",
 		"app.security.api-keys[0].scopes=validation:execute",
@@ -29,6 +30,9 @@ class AuthenticationTest {
 
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository executionRepository;
+
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
 
 	@Autowired
 	MockMvc mvc;
