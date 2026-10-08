@@ -1,18 +1,18 @@
-date: 2026-10-03T21:58:46-03:00
+date: 2026-10-08T01:55:51-03:00
 cpu:  AMD Ryzen 5 5600X 6-Core Processor x12
 mem_mb: 15957
 java: openjdk version "17.0.20.1" 2026-08-18 LTS
 postgres: 17.11 (Debian 17.11-1.pgdg13+2) (docker, default config)
 note: app, DB and load driver share one machine
-{"concurrency": 8, "duration_s": 30.0, "ok": 16605, "errors": {}, "throughput_rps": 553.5, "p50_ms": 13.8, "p95_ms": 19.1, "p99_ms": 22.0, "max_ms": 37.4}
-  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 49|52|370|3721 -> 161822|108259|421|1684531
-  db: 11 connections, size 46 MB
-  pg container: cpu 0.03% mem 101.8MiB / 15.58GiB
-{"concurrency": 32, "duration_s": 30.0, "ok": 19961, "errors": {}, "throughput_rps": 665.4, "p50_ms": 49.2, "p95_ms": 54.2, "p99_ms": 58.1, "max_ms": 86.6}
-  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 161828|108259|424|1685225 -> 371000|247688|424|3730454
-  db: 11 connections, size 94 MB
-  pg container: cpu 0.02% mem 157.8MiB / 15.58GiB
-{"concurrency": 64, "duration_s": 30.0, "ok": 19940, "errors": {}, "throughput_rps": 664.7, "p50_ms": 100.0, "p95_ms": 106.8, "p99_ms": 112.2, "max_ms": 148.6}
-  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 371006|247688|424|3731154 -> 583139|389107|506|5963782
-  db: 11 connections, size 143 MB
-  pg container: cpu 0.53% mem 199MiB / 15.58GiB
+{"concurrency": 8, "duration_s": 30.0, "ok": 14984, "errors": {}, "throughput_rps": 499.5, "p50_ms": 15.1, "p95_ms": 21.1, "p99_ms": 25.5, "max_ms": 45.3}
+  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 55|53|429|4685 -> 144008|96391|486|1798380
+  db: 11 connections, size 42 MB
+  pg container: cpu 0.03% mem 111.1MiB / 15.58GiB
+{"concurrency": 32, "duration_s": 30.0, "ok": 18887, "errors": {}, "throughput_rps": 629.6, "p50_ms": 51.6, "p95_ms": 58.6, "p99_ms": 66.0, "max_ms": 104.8}
+  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 144014|96391|489|1799074 -> 340436|227317|489|3722028
+  db: 11 connections, size 87 MB
+  pg container: cpu 0.02% mem 165.7MiB / 15.58GiB
+{"concurrency": 64, "duration_s": 30.0, "ok": 18980, "errors": {}, "throughput_rps": 632.7, "p50_ms": 104.9, "p95_ms": 113.8, "p99_ms": 123.5, "max_ms": 157.8}
+  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 340442|227317|489|3722728 -> 542122|361754|495|5763987
+  db: 11 connections, size 134 MB
+  pg container: cpu 0.01% mem 212.2MiB / 15.58GiB
