@@ -8,12 +8,12 @@ import java.util.Map;
  * Typed view of a node's {@code config} in the snapshot. {@code raw} is the untouched dynamic config, still what
  * validators receive and what the END node persists.
  */
-record NodeConfig(Duration timeout, String validatorType, RetryPolicy retryPolicy, Integer maxDepth, String flowKey,
+public record NodeConfig(Duration timeout, String validatorType, RetryPolicy retryPolicy, Integer maxDepth, String flowKey,
 		Map<String, String> inputMapping, Map<String, String> outputMapping, List<Map<String, Object>> documentGroups,
 		Map<String, Object> raw) {
 
 	/** {@code backoffExponential}: delay doubles per attempt (capped by the runner) instead of staying fixed. */
-	record RetryPolicy(int maxAttempts, Duration delay, boolean backoffExponential) {
+	public record RetryPolicy(int maxAttempts, Duration delay, boolean backoffExponential) {
 	}
 
 	static NodeConfig from(Map<String, Object> raw) {

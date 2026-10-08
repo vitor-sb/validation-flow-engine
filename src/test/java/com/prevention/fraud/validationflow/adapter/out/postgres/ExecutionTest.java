@@ -242,6 +242,27 @@ class ExecutionTest {
 	}
 
 	@Test
+	void handlersAreResolvedByTypeAndUnknownTypeFails() {
+		var ran = new java.util.concurrent.atomic.AtomicBoolean();
+		var startOnly = new ExecutionService(flows, new JdbcExecutionRepository(jdbc, JsonMapper.builder().build()),
+				List.of(new com.prevention.fraud.validationflow.application.execution.NodeHandler() {
+					public String type() {
+						return "START";
+					}
+
+					public FlowExecution handle(com.prevention.fraud.validationflow.application.execution.NodeStep step) {
+						ran.set(true);
+						return null;
+					}
+				}));
+		activate("k-handler", "CH", graph(true, "v1"), List.of());
+		FlowExecution f = startOnly.execute("t", null, "PF", "CH", Map.of(), null);
+		assertTrue(ran.get());
+		assertEquals(ExecutionStatus.FAILED, f.status());
+		assertEquals("UNSUPPORTED_NODE_TYPE", f.errorInfo().get("code"));
+	}
+
+	@Test
 	void sequentialAndConditionalPathsAndAudit() {
 		activate("k1", "C1", graph(true, "v1"), List.of(new InputField("ok", "boolean", true)));
 		FlowExecution yes = executions.execute("t", null, "PF", "C1", Map.of("ok", true), "corr-1");

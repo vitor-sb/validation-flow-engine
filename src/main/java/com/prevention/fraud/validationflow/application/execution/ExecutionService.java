@@ -5,7 +5,6 @@ import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.masking.LogMasker;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
-import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,7 +14,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.prevention.fraud.validationflow.domain.execution.ConditionEvaluator;
-import com.prevention.fraud.validationflow.domain.execution.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
@@ -36,19 +34,18 @@ public class ExecutionService {
 
 	private final ExecutionRepository repository;
 
-	private final ValidatorRegistry registry;
-
-	private final ValidatorRunner runner;
-
-	private final SubFlowRunner subFlows;
+	private final Map<String, NodeHandler> handlers = new HashMap<>();
 
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
 			ValidatorRunner runner) {
+		this(flows, repository, NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)));
+	}
+
+	/** Handlers are resolved by {@link NodeHandler#type()}; a later handler replaces an earlier one of the same type. */
+	public ExecutionService(FlowService flows, ExecutionRepository repository, List<NodeHandler> handlers) {
 		this.flows = flows;
 		this.repository = repository;
-		this.registry = registry;
-		this.runner = runner;
-		this.subFlows = new SubFlowRunner(flows);
+		handlers.forEach(h -> this.handlers.put(h.type(), h));
 	}
 
 	/** Synchronous: resolves the active flow, validates the input contract, walks the snapshot graph, returns the final state. */
@@ -62,7 +59,7 @@ public class ExecutionService {
 	 * Runs one flow; {@code chain} holds the flowKeys of the ancestors (empty for a root run) and {@code ctx} is filled
 	 * with the execution context so a parent can read the child's unmasked outputs.
 	 */
-	private FlowExecution run(String tenantId, FlowDefinition flow, String correlationId,
+	FlowExecution run(String tenantId, FlowDefinition flow, String correlationId,
 			Map<String, Object> inputData, UUID parentId, String parentNodeId, List<String> chain,
 			Map<String, Object> ctx) {
 		List<String> missing = flow.inputContract().stream()
@@ -115,49 +112,13 @@ public class ExecutionService {
 			Map<String, Object> node = Maps.of(nodes.get(id));
 			String type = (String) node.get("type");
 			NodeConfig config = NodeConfig.from(Maps.of(node.get("config")));
-			switch (type) {
-				case "START" -> recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
-				case "DECISION" -> {
-					var groups = config.documentGroups();
-					Map<String, Object> out = groups == null ? Map.of() : DocumentGroups.resolve(groups, ctx);
-					if (groups != null) {
-						outputs.put(id, out);
-					}
-					recordNode(ex, id, type, 1, "COMPLETED", out, null, ctx, Instant.now());
-				}
-				case "VALIDATION" -> {
-					ValidatorStrategy v = registry.find(config.validatorType()).orElse(null);
-					if (v == null) {
-						return save(ex.fail(ctx, "VALIDATOR_NOT_FOUND", "validator not registered at node " + id));
-					}
-					String nodeId = id;
-					var a = runner.run(nodeId, v, ctx, config,
-							(att, st, out, err, t) -> recordNode(ex, nodeId, type, att, st, out, err, ctx, t));
-					if (a.error() != null) {
-						return save(ex.fail(ctx, (String) a.error().get("code"), (String) a.error().get("message"),
-								(Boolean) a.error().get("retryable"), Map.of("nodeId", id, "attempts", a.attempts())));
-					}
-					Map<String, Object> out = new LinkedHashMap<>(a.result().output() == null ? Map.of() : a.result().output());
-					out.put("success", a.result().success());
-					outputs.put(id, out);
-				}
-				case "SUB_FLOW" -> {
-					FlowExecution failed = subFlow(ex, id, config, ctx, outputs, chain);
-					if (failed != null) {
-						return failed;
-					}
-				}
-				case "END" -> {
-					recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
-					Map<String, Object> result = new LinkedHashMap<>();
-					result.put("endNodeId", id);
-					result.put("config", config.raw());
-					result.put("nodes", ctx.get("nodes"));
-					return save(ex.complete(ctx, result));
-				}
-				default -> {
-					return save(ex.fail(ctx, "UNSUPPORTED_NODE_TYPE", type + " nodes are not supported yet (node " + id + ")"));
-				}
+			NodeHandler handler = handlers.get(type);
+			if (handler == null) {
+				return save(ex.fail(ctx, "UNSUPPORTED_NODE_TYPE", type + " nodes are not supported yet (node " + id + ")"));
+			}
+			FlowExecution done = handler.handle(new NodeStep(ex, id, type, config, ctx, outputs, chain, this));
+			if (done != null) {
+				return done;
 			}
 			String next = null;
 			for (Map<String, Object> t : Maps.list(node.get("transitions"))) {
@@ -179,22 +140,8 @@ public class ExecutionService {
 		}
 	}
 
-	/** Returns the failed parent, or null to keep walking. */
-	private FlowExecution subFlow(FlowExecution ex, String nodeId, NodeConfig config, Map<String, Object> ctx,
-			Map<String, Object> outputs, List<String> chain) {
-		Instant started = Instant.now();
-		var r = subFlows.run(ex, nodeId, config, ctx, chain, this::run);
-		if (r.code() != null) {
-			recordNode(ex, nodeId, "SUB_FLOW", 1, "FAILED", Map.of(), error(r.code(), r.message(), false), ctx, started);
-			return save(ex.fail(ctx, r.code(), r.message(), false, r.details()));
-		}
-		outputs.put(nodeId, r.output());
-		recordNode(ex, nodeId, "SUB_FLOW", 1, "COMPLETED", r.output(), null, ctx, started);
-		return null;
-	}
-
 	/** Persists the attempt and logs it; payloads only appear in logs masked. */
-	private void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
+	void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
 			Map<String, Object> output, Map<String, Object> error, Map<String, Object> ctx, Instant started) {
 		error = error == null ? null : Maps.of(redact(error, ctx));
 		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, secrets(output), secrets(error),
@@ -263,7 +210,7 @@ public class ExecutionService {
 	}
 
 	/** Persists with optimistic locking and returns the instance carrying the new lock version. */
-	private FlowExecution save(FlowExecution ex) {
+	FlowExecution save(FlowExecution ex) {
 		ex = new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
 				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), secrets(ex.contextData()),
 				secrets(ex.result()), errorInfo(ex), ex.lockVersion(), ex.startedAt(), ex.completedAt(),
