@@ -53,19 +53,16 @@ public class ValidatorRunner {
 	}
 
 	/** Runs the validator up to retryPolicy.maxAttempts times. */
-	@SuppressWarnings("unchecked")
-	Attempt run(String nodeId, ValidatorStrategy v, Map<String, Object> ctx, Map<String, Object> config,
+	Attempt run(String nodeId, ValidatorStrategy v, Map<String, Object> ctx, NodeConfig config,
 			AttemptRecorder recorder) {
-		Map<String, Object> policy = (Map<String, Object>) config.getOrDefault("retryPolicy", Map.of());
-		int max = policy.get("maxAttempts") instanceof Integer n ? n : 1;
-		Duration delay = Duration.parse((String) policy.getOrDefault("delay", "PT0.1S"));
-		Duration timeout = config.get("timeout") == null ? null : Duration.parse((String) config.get("timeout"));
+		int max = config.retryPolicy().maxAttempts();
+		Duration timeout = config.timeout();
 		for (int attempt = 1;; attempt++) {
 			String status = "FAILED";
 			Map<String, Object> error;
 			Instant started = Instant.now();
 			try {
-				var r = call(v, ctx, config, timeout);
+				var r = call(v, ctx, config.raw(), timeout);
 				recorder.record(attempt, r.success() ? "COMPLETED" : "FAILED", r.output() == null ? Map.of() : r.output(), null,
 						started);
 				return new Attempt(r, null, attempt);
@@ -87,7 +84,7 @@ public class ValidatorRunner {
 				return new Attempt(null, error, attempt);
 			}
 			meters.counter("validation.node.retry", "validator", v.key()).increment();
-			if (!sleep(backoffMillis(delay, "EXPONENTIAL".equals(policy.get("backoff")), attempt))) {
+			if (!sleep(backoffMillis(config.retryPolicy().delay(), config.retryPolicy().backoffExponential(), attempt))) {
 				return new Attempt(null, ExecutionService.error("INTERRUPTED", "interrupted while backing off", false),
 						attempt);
 			}

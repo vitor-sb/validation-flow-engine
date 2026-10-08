@@ -83,11 +83,12 @@ public class ExecutionService {
 		MDC.put("flowVersion", String.valueOf(ex.flowVersion()));
 		// fresh map per execution: nothing is shared between runs
 		ctx.put("inputData", inputData);
-		ctx.put("nodes", new LinkedHashMap<String, Object>());
+		Map<String, Object> outputs = new LinkedHashMap<>();
+		ctx.put("nodes", outputs);
 		try {
 			List<String> path = new ArrayList<>(chain);
 			path.add(ex.flowKey());
-			FlowExecution done = walk(ex, ctx, path);
+			FlowExecution done = walk(ex, ctx, outputs, path);
 			MDC.put("status", done.status().name());
 			log.info("execution finished");
 			return done;
@@ -106,27 +107,26 @@ public class ExecutionService {
 		}
 	}
 
-	@SuppressWarnings("unchecked")
-	private FlowExecution walk(FlowExecution ex, Map<String, Object> ctx, List<String> chain) {
-		Map<String, Map<String, Object>> nodes = (Map<String, Map<String, Object>>) ex.snapshot().get("nodes");
+	private FlowExecution walk(FlowExecution ex, Map<String, Object> ctx, Map<String, Object> outputs,
+			List<String> chain) {
+		Map<String, Object> nodes = Maps.of(ex.snapshot().get("nodes"));
 		String id = (String) ex.snapshot().get("startNodeId");
 		while (true) {
-			Map<String, Object> node = nodes.get(id);
+			Map<String, Object> node = Maps.of(nodes.get(id));
 			String type = (String) node.get("type");
-			Map<String, Object> config = node.get("config") == null ? Map.of() : (Map<String, Object>) node.get("config");
+			NodeConfig config = NodeConfig.from(Maps.of(node.get("config")));
 			switch (type) {
 				case "START" -> recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
 				case "DECISION" -> {
-					Object groups = ((Map<String, Object>) config.getOrDefault("params", Map.of())).get("documentGroups");
-					Map<String, Object> out = groups == null ? Map.of()
-							: DocumentGroups.resolve((List<Map<String, Object>>) groups, ctx);
+					var groups = config.documentGroups();
+					Map<String, Object> out = groups == null ? Map.of() : DocumentGroups.resolve(groups, ctx);
 					if (groups != null) {
-						((Map<String, Object>) ctx.get("nodes")).put(id, out);
+						outputs.put(id, out);
 					}
 					recordNode(ex, id, type, 1, "COMPLETED", out, null, ctx, Instant.now());
 				}
 				case "VALIDATION" -> {
-					ValidatorStrategy v = registry.find((String) config.get("validatorType")).orElse(null);
+					ValidatorStrategy v = registry.find(config.validatorType()).orElse(null);
 					if (v == null) {
 						return save(ex.fail(ctx, "VALIDATOR_NOT_FOUND", "validator not registered at node " + id));
 					}
@@ -139,10 +139,10 @@ public class ExecutionService {
 					}
 					Map<String, Object> out = new LinkedHashMap<>(a.result().output() == null ? Map.of() : a.result().output());
 					out.put("success", a.result().success());
-					((Map<String, Object>) ctx.get("nodes")).put(id, out);
+					outputs.put(id, out);
 				}
 				case "SUB_FLOW" -> {
-					FlowExecution failed = subFlow(ex, id, config, ctx, chain);
+					FlowExecution failed = subFlow(ex, id, config, ctx, outputs, chain);
 					if (failed != null) {
 						return failed;
 					}
@@ -151,7 +151,7 @@ public class ExecutionService {
 					recordNode(ex, id, type, 1, "COMPLETED", Map.of(), null, ctx, Instant.now());
 					Map<String, Object> result = new LinkedHashMap<>();
 					result.put("endNodeId", id);
-					result.put("config", config);
+					result.put("config", config.raw());
 					result.put("nodes", ctx.get("nodes"));
 					return save(ex.complete(ctx, result));
 				}
@@ -160,8 +160,8 @@ public class ExecutionService {
 				}
 			}
 			String next = null;
-			for (Map<String, Object> t : (List<Map<String, Object>>) node.getOrDefault("transitions", new ArrayList<>())) {
-				Map<String, Object> cond = (Map<String, Object>) t.get("condition");
+			for (Map<String, Object> t : Maps.list(node.get("transitions"))) {
+				Map<String, Object> cond = t.get("condition") == null ? null : Maps.of(t.get("condition"));
 				// a transition without condition is the default branch
 				var ev = cond == null ? null : ConditionEvaluator.evaluate(cond, ctx);
 				repository.audit(ex.tenantId(), ex.id(), "TRANSITION_EVALUATED", id, Map.of("to", t.get("to"),
@@ -180,25 +180,23 @@ public class ExecutionService {
 	}
 
 	/** Returns the failed parent, or null to keep walking. */
-	@SuppressWarnings("unchecked")
-	private FlowExecution subFlow(FlowExecution ex, String nodeId, Map<String, Object> config,
-			Map<String, Object> ctx, List<String> chain) {
+	private FlowExecution subFlow(FlowExecution ex, String nodeId, NodeConfig config, Map<String, Object> ctx,
+			Map<String, Object> outputs, List<String> chain) {
 		Instant started = Instant.now();
 		var r = subFlows.run(ex, nodeId, config, ctx, chain, this::run);
 		if (r.code() != null) {
 			recordNode(ex, nodeId, "SUB_FLOW", 1, "FAILED", Map.of(), error(r.code(), r.message(), false), ctx, started);
 			return save(ex.fail(ctx, r.code(), r.message(), false, r.details()));
 		}
-		((Map<String, Object>) ctx.get("nodes")).put(nodeId, r.output());
+		outputs.put(nodeId, r.output());
 		recordNode(ex, nodeId, "SUB_FLOW", 1, "COMPLETED", r.output(), null, ctx, started);
 		return null;
 	}
 
 	/** Persists the attempt and logs it; payloads only appear in logs masked. */
-	@SuppressWarnings("unchecked")
 	private void recordNode(FlowExecution ex, String nodeId, String type, int attempt, String status,
 			Map<String, Object> output, Map<String, Object> error, Map<String, Object> ctx, Instant started) {
-		error = (Map<String, Object>) redact(error, ctx);
+		error = error == null ? null : Maps.of(redact(error, ctx));
 		repository.recordNode(ex.tenantId(), ex.id(), nodeId, type, attempt, status, secrets(output), secrets(error),
 				secrets(ctx), started);
 		MDC.put("nodeId", nodeId);
@@ -231,9 +229,8 @@ public class ExecutionService {
 		return repository.count(tenantId);
 	}
 
-	@SuppressWarnings("unchecked")
 	private static Map<String, Object> secrets(Map<String, Object> m) {
-		return m == null ? null : (Map<String, Object>) LogMasker.maskSecrets(m);
+		return m == null ? null : Maps.of(LogMasker.maskSecrets(m));
 	}
 
 	/** Replaces the credential values found in {@code ctx} by {@code ***} in every string of {@code value}. */
@@ -242,12 +239,11 @@ public class ExecutionService {
 	}
 
 	/** {@code observed} mirrors the condition tree (a list for AND/OR/NOT); credential fields are never recorded. */
-	@SuppressWarnings("unchecked")
 	private static Object maskObserved(Map<String, Object> cond, Object observed) {
 		if (observed instanceof List<?> obs && cond.get("conditions") instanceof List<?> subs) {
 			List<Object> out = new ArrayList<>();
 			for (int i = 0; i < obs.size(); i++) {
-				out.add(maskObserved((Map<String, Object>) subs.get(i), obs.get(i)));
+				out.add(maskObserved(Maps.of(subs.get(i)), obs.get(i)));
 			}
 			return out;
 		}
@@ -258,12 +254,11 @@ public class ExecutionService {
 		return Map.of("code", code, "message", message, "retryable", retryable);
 	}
 
-	@SuppressWarnings("unchecked")
 	private static Map<String, Object> errorInfo(FlowExecution ex) {
 		if (ex.errorInfo() == null) {
 			return null;
 		}
-		Map<String, Object> redacted = (Map<String, Object>) redact(ex.errorInfo(), ex.contextData());
+		Map<String, Object> redacted = Maps.of(redact(ex.errorInfo(), ex.contextData()));
 		return secrets(redacted);
 	}
 

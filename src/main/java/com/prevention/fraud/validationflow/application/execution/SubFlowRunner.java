@@ -40,11 +40,10 @@ class SubFlowRunner {
 	 * the child runs at level {@code chain.size()} (root = 0) and may not exceed the node's maxDepth (default
 	 * {@link GraphValidator#MAX_SUB_FLOW_DEPTH}).
 	 */
-	@SuppressWarnings("unchecked")
-	Outcome run(FlowExecution ex, String nodeId, Map<String, Object> config, Map<String, Object> ctx,
+	Outcome run(FlowExecution ex, String nodeId, NodeConfig config, Map<String, Object> ctx,
 			List<String> chain, ChildRun childRun) {
-		String childKey = (String) config.get("flowKey");
-		int limit = config.get("maxDepth") instanceof Integer d ? d : GraphValidator.MAX_SUB_FLOW_DEPTH;
+		String childKey = config.flowKey();
+		int limit = config.maxDepth() != null ? config.maxDepth() : GraphValidator.MAX_SUB_FLOW_DEPTH;
 		String code;
 		String message;
 		Map<String, Object> details = new LinkedHashMap<>(Map.of("nodeId", nodeId));
@@ -64,7 +63,7 @@ class SubFlowRunner {
 		FlowExecution child = null;
 		if (code == null) {
 			Map<String, Object> input = new LinkedHashMap<>();
-			((Map<String, String>) config.getOrDefault("inputMapping", Map.of())).forEach((name, path) -> {
+			config.inputMapping().forEach((name, path) -> {
 				Object v = ConditionEvaluator.lookup(ctx, jsonPath(path));
 				if (v != null) {
 					input.put(name, v);
@@ -89,7 +88,7 @@ class SubFlowRunner {
 			return new Outcome(code, message, details, null);
 		}
 		Map<String, Object> out = new LinkedHashMap<>();
-		((Map<String, String>) config.getOrDefault("outputMapping", Map.of())).forEach((name, path) -> {
+		config.outputMapping().forEach((name, path) -> {
 			Object v = ConditionEvaluator.lookup(childCtx, jsonPath(path));
 			if (v != null) {
 				out.put(name, v);
