@@ -16,7 +16,12 @@ public record NodeStep(FlowExecution ex, String nodeId, String type, NodeConfig 
 
 	/** Parks the execution in WAITING at this node (history entry PENDING) and returns it; return it from {@link NodeHandler#handle}. */
 	public FlowExecution pause(String reason, Instant deadline) {
-		host.recorder().recordNode(ex, nodeId, type, 1, "PENDING", Map.of(), null, ctx, Instant.now());
+		return pause(reason, deadline, Map.of());
+	}
+
+	/** Same as {@link #pause(String, Instant)}, with {@code details} recorded as the PENDING history entry's output. */
+	public FlowExecution pause(String reason, Instant deadline, Map<String, Object> details) {
+		host.recorder().recordNode(ex, nodeId, type, 1, "PENDING", details, null, ctx, Instant.now());
 		return host.save(ex.waitAt(nodeId, deadline, reason, ctx));
 	}
 

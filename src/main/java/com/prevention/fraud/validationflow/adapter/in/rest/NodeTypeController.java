@@ -3,6 +3,7 @@ package com.prevention.fraud.validationflow.adapter.in.rest;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +32,12 @@ class NodeTypeController {
 			@Schema(description = "Declared capabilities", example = "[\"RETRY\",\"TIMEOUT\"]") Set<String> capabilities) {
 	}
 
+	/** Built-in node (not a validator): pauses the execution until a person decides. */
+	private static final NodeType HUMAN_APPROVAL = new NodeType("HUMAN_APPROVAL", Map.of("type", "object", "required",
+			List.of("reason", "deadline"), "properties", Map.of("reason", Map.of("type", "string"), "assignedGroup",
+					Map.of("type", "string"), "deadline", Map.of("type", "string", "format", "duration"))),
+			Set.of());
+
 	private final ValidatorRegistry registry;
 
 	NodeTypeController(ValidatorRegistry registry) {
@@ -40,7 +47,7 @@ class NodeTypeController {
 	@GetMapping
 	@Operation(summary = "List node types", description = "All validator types registered in this deployment.", security = @SecurityRequirement(name = "apiKey", scopes = "flow:read"))
 	List<NodeType> list() {
-		return registry.all().stream().map(NodeTypeController::toDto).toList();
+		return Stream.concat(registry.all().stream().map(NodeTypeController::toDto), Stream.of(HUMAN_APPROVAL)).toList();
 	}
 
 	@GetMapping("/{key}")
@@ -48,6 +55,9 @@ class NodeTypeController {
 	@ApiResponse(responseCode = "200", description = "OK")
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
 	NodeType get(@PathVariable String key) {
+		if (HUMAN_APPROVAL.key().equals(key)) {
+			return HUMAN_APPROVAL;
+		}
 		return toDto(registry.find(key).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "node type not found: " + key)));
 	}
 

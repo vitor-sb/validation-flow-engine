@@ -281,6 +281,25 @@ class ExecutionTest {
 	}
 
 	@Test
+	void humanApprovalParksExecutionWithReasonGroupAndDeadline() {
+		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),
+				"h", Map.of("type", "HUMAN_APPROVAL", "config", Map.of("reason", "manual review", "assignedGroup", "risk",
+						"deadline", "PT1H"), "transitions", List.of(Map.of("to", "e", "label", "APPROVED"),
+						Map.of("to", "e", "label", "REJECTED"))),
+				"e", Map.of("type", "END")));
+		activate("k-human", "CHUMAN", g, List.of());
+		FlowExecution f = executions.execute("t", null, "PF", "CHUMAN", Map.of(), null);
+		assertEquals(ExecutionStatus.WAITING, f.status());
+		assertEquals("h", f.waitingNodeId());
+		assertEquals("manual review", f.waitReason());
+		assertTrue(f.waitDeadline().isAfter(java.time.Instant.now().plusSeconds(3000)));
+		assertEquals("risk", jdbc.queryForObject(
+				"SELECT output_data->>'assignedGroup' FROM node_execution WHERE execution_id = ? AND node_id = 'h'",
+				String.class, f.id()));
+	}
+
+	@Test
 	void handlersAreResolvedByTypeAndUnknownTypeFails() {
 		var ran = new java.util.concurrent.atomic.AtomicBoolean();
 		var startOnly = new ExecutionService(flows, exRepo,

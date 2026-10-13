@@ -21,13 +21,14 @@ public class GraphValidator {
 	}
 
 	public static final int MAX_SUB_FLOW_DEPTH = 3;
-	private static final Set<String> NODE_TYPES = Set.of("START", "VALIDATION", "DECISION", "SUB_FLOW", "END");
+	private static final Set<String> NODE_TYPES = Set.of("START", "VALIDATION", "DECISION", "SUB_FLOW", "HUMAN_APPROVAL", "END");
 
 	public static final int DEFAULT_MAX_NODES = 200;
 	public static final int DEFAULT_MAX_TRANSITIONS = 1000;
 	public static final int DEFAULT_MAX_ATTEMPTS = 10;
 	public static final Duration DEFAULT_MAX_DELAY = Duration.ofMinutes(1);
 	public static final Duration DEFAULT_MAX_TIMEOUT = Duration.ofMinutes(5);
+	public static final Duration DEFAULT_MAX_WAIT = Duration.ofDays(7);
 
 	private final NodeConfigRules configRules;
 	private final int maxNodes;
@@ -43,7 +44,12 @@ public class GraphValidator {
 
 	public GraphValidator(Predicate<String> validatorExists, int maxNodes, int maxTransitions, int maxAttempts,
 			Duration maxDelay, Duration maxTimeout) {
-		this.configRules = new NodeConfigRules(validatorExists, maxAttempts, maxDelay, maxTimeout);
+		this(validatorExists, maxNodes, maxTransitions, maxAttempts, maxDelay, maxTimeout, DEFAULT_MAX_WAIT);
+	}
+
+	public GraphValidator(Predicate<String> validatorExists, int maxNodes, int maxTransitions, int maxAttempts,
+			Duration maxDelay, Duration maxTimeout, Duration maxWait) {
+		this.configRules = new NodeConfigRules(validatorExists, maxAttempts, maxDelay, maxTimeout, maxWait);
 		this.maxNodes = maxNodes;
 		this.maxTransitions = maxTransitions;
 	}
@@ -114,6 +120,14 @@ public class GraphValidator {
 			}
 			if (tr.containsKey("condition") && !NodeConfigRules.validCondition(tr.get("condition"))) {
 				errors.add(err("INVALID_CONDITION", id, "invalid condition"));
+			}
+		}
+		if ("HUMAN_APPROVAL".equals(type)) {
+			Set<Object> labels = new HashSet<>();
+			list(node.get("transitions")).forEach(t -> labels.add(map(t).get("label")));
+			if (!labels.containsAll(Set.of("APPROVED", "REJECTED"))) {
+				errors.add(err("MISSING_APPROVAL_TRANSITION", id,
+						"HUMAN_APPROVAL needs transitions labelled APPROVED and REJECTED"));
 			}
 		}
 		return targets;

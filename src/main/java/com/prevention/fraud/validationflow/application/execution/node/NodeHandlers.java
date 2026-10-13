@@ -5,6 +5,7 @@ import com.prevention.fraud.validationflow.application.validator.ValidatorRegist
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import com.prevention.fraud.validationflow.domain.flow.DocumentGroups;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,7 +18,7 @@ public final class NodeHandlers {
 	}
 
 	public static List<NodeHandler> defaults(ValidatorRegistry registry, ValidatorRunner runner, SubFlowRunner subFlows) {
-		return List.of(new Start(), new Decision(), new Validation(registry, runner), new SubFlow(subFlows), new End());
+		return List.of(new Start(), new Decision(), new Validation(registry, runner), new SubFlow(subFlows), new HumanApproval(), new End());
 	}
 
 	private static void complete(NodeStep s, Map<String, Object> out, Instant started) {
@@ -98,6 +99,27 @@ public final class NodeHandlers {
 			s.outputs().put(s.nodeId(), r.output());
 			complete(s, r.output(), started);
 			return null;
+		}
+
+	}
+
+	/** Parks the execution until a person decides; the deadline was already validated against {@code app.limits.max-wait}. */
+	public record HumanApproval() implements NodeHandler {
+
+		public String type() {
+			return "HUMAN_APPROVAL";
+		}
+
+		public FlowExecution handle(NodeStep s) {
+			Map<String, Object> raw = s.config().raw();
+			Map<String, Object> details = new LinkedHashMap<>();
+			details.put("reason", raw.get("reason"));
+			if (raw.get("assignedGroup") != null) {
+				details.put("assignedGroup", raw.get("assignedGroup"));
+			}
+			Instant deadline = Instant.now().plus(Duration.parse((String) raw.get("deadline")));
+			details.put("deadline", deadline.toString());
+			return s.pause((String) raw.get("reason"), deadline, details);
 		}
 
 	}

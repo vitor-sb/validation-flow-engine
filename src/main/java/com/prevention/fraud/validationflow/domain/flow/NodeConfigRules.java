@@ -20,8 +20,11 @@ class NodeConfigRules {
 	private final int maxAttempts;
 	private final Duration maxDelay;
 	private final Duration maxTimeout;
+	private final Duration maxWait;
 
-	NodeConfigRules(Predicate<String> validatorExists, int maxAttempts, Duration maxDelay, Duration maxTimeout) {
+	NodeConfigRules(Predicate<String> validatorExists, int maxAttempts, Duration maxDelay, Duration maxTimeout,
+			Duration maxWait) {
+		this.maxWait = maxWait;
 		this.validatorExists = validatorExists;
 		this.maxAttempts = maxAttempts;
 		this.maxDelay = maxDelay;
@@ -35,6 +38,25 @@ class NodeConfigRules {
 		retryPolicy(id, config, errors);
 		if ("SUB_FLOW".equals(type)) {
 			subFlow(id, config, errors);
+		}
+		if ("HUMAN_APPROVAL".equals(type)) {
+			humanApproval(id, config, errors);
+		}
+	}
+
+	private void humanApproval(String id, Map<String, Object> config, List<GraphError> errors) {
+		if (!(config.get("reason") instanceof String r) || r.isBlank()
+				|| (config.containsKey("assignedGroup") && !(config.get("assignedGroup") instanceof String)) ) {
+			errors.add(err("INVALID_HUMAN_APPROVAL", id, "HUMAN_APPROVAL requires reason; assignedGroup must be a string"));
+		}
+		try {
+			Duration d = Duration.parse((String) config.get("deadline"));
+			if (d.compareTo(Duration.ZERO) <= 0 || d.compareTo(maxWait) > 0) {
+				throw new IllegalArgumentException();
+			}
+		}
+		catch (RuntimeException e) {
+			errors.add(err("INVALID_DEADLINE", id, "deadline is required: a positive ISO-8601 duration of at most " + maxWait));
 		}
 	}
 

@@ -45,6 +45,34 @@ class GraphValidatorTest {
 		assertTrue(codes.contains(code), code + " expected in " + codes);
 	}
 
+	void humanApproval(Map<String, Object> config, String... labels) {
+		Map<String, Object> g = valid();
+		var h = node("HUMAN_APPROVAL", config);
+		h.put("transitions", java.util.Arrays.stream(labels).map(l -> Map.of("to", "end", "label", l)).toList());
+		nodes(g).put("approval", h);
+		((Map<String, Object>) nodes(g).get("check")).put("transitions", List.of(Map.of("to", "approval")));
+		nodes(g).put("check", nodes(g).get("check"));
+		var codes = validator.validate(g).stream().map(GraphValidator.GraphError::code).toList();
+		humanApprovalCodes = codes;
+	}
+
+	List<String> humanApprovalCodes;
+
+	@Test
+	@SuppressWarnings("unchecked")
+	void humanApprovalRules() {
+		humanApproval(Map.of("reason", "r", "deadline", "PT1H"), "APPROVED", "REJECTED");
+		assertEquals(List.of(), humanApprovalCodes);
+		humanApproval(Map.of("reason", "r"), "APPROVED", "REJECTED");
+		assertTrue(humanApprovalCodes.contains("INVALID_DEADLINE"));
+		humanApproval(Map.of("reason", "r", "deadline", "P30D"), "APPROVED", "REJECTED");
+		assertTrue(humanApprovalCodes.contains("INVALID_DEADLINE"));
+		humanApproval(Map.of("reason", "r", "deadline", "PT1H"), "APPROVED");
+		assertTrue(humanApprovalCodes.contains("MISSING_APPROVAL_TRANSITION"));
+		humanApproval(Map.of("deadline", "PT1H"), "APPROVED", "REJECTED");
+		assertTrue(humanApprovalCodes.contains("INVALID_HUMAN_APPROVAL"));
+	}
+
 	@Test
 	void validGraphPasses() {
 		assertEquals(List.of(), validator.validate(valid()));
