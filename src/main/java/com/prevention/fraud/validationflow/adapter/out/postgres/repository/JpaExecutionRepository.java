@@ -42,7 +42,7 @@ public class JpaExecutionRepository implements ExecutionRepository {
 	@Transactional
 	public boolean update(FlowExecution e) {
 		return executions.update(e.tenantId(), e.id(), e.lockVersion(), e.status(), e.contextData(), e.result(),
-				e.errorInfo(), e.completedAt()) == 1;
+				e.errorInfo(), e.completedAt(), e.waitingNodeId(), e.waitDeadline(), e.waitReason()) == 1;
 	}
 
 	@Override

@@ -181,14 +181,15 @@ public class ExecutionService {
 		ex = new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
 				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), LogMasker.secrets(ex.contextData()),
 				LogMasker.secrets(ex.result()), errorInfo(ex), ex.lockVersion(), ex.startedAt(), ex.completedAt(),
-				ex.parentExecutionId(), ex.parentNodeId());
+				ex.parentExecutionId(), ex.parentNodeId(), ex.waitingNodeId(), ex.waitDeadline(),
+				ex.waitReason());
 		if (!repository.update(ex)) {
 			throw new IllegalStateException("execution " + ex.id() + " was modified concurrently");
 		}
 		return new FlowExecution(ex.id(), ex.tenantId(), ex.flowDefinitionId(), ex.flowKey(), ex.flowVersion(),
 				ex.snapshot(), ex.correlationId(), ex.status(), ex.inputData(), ex.contextData(), ex.result(),
 				ex.errorInfo(), ex.lockVersion() + 1, ex.startedAt(), ex.completedAt(), ex.parentExecutionId(),
-				ex.parentNodeId());
+				ex.parentNodeId(), ex.waitingNodeId(), ex.waitDeadline(), ex.waitReason());
 	}
 
 }

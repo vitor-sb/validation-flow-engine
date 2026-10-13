@@ -33,11 +33,13 @@ public interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionE
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("""
 			update FlowExecutionEntity e set e.status = :status, e.contextData = :context, e.result = :result,
-			  e.errorInfo = :error, e.completedAt = :completedAt, e.lockVersion = e.lockVersion + 1
+			  e.errorInfo = :error, e.completedAt = :completedAt, e.waitingNodeId = :waitNode,
+			  e.waitDeadline = :waitDeadline, e.waitReason = :waitReason, e.lockVersion = e.lockVersion + 1
 			where e.tenantId = :tenantId and e.id = :id and e.lockVersion = :lockVersion""")
 	int update(@Param("tenantId") String tenantId, @Param("id") UUID id, @Param("lockVersion") long lockVersion,
 			@Param("status") ExecutionStatus status, @Param("context") Map<String, Object> context,
 			@Param("result") Map<String, Object> result, @Param("error") Map<String, Object> error,
-			@Param("completedAt") Instant completedAt);
+			@Param("completedAt") Instant completedAt, @Param("waitNode") String waitNode,
+			@Param("waitDeadline") Instant waitDeadline, @Param("waitReason") String waitReason);
 
 }

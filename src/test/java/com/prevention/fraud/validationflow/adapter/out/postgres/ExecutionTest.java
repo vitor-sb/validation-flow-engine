@@ -641,6 +641,25 @@ class ExecutionTest {
 		assertEquals(ExecutionStatus.COMPLETED, executions.get("t", late.id()).status());
 	}
 
+	@Test
+	void recoveryIgnoresWaitingAndPersistsWaitColumns() {
+		var flow = flows.get("t", activate("rec-w", "CR-w", graph(true, "x"), List.of()));
+		var old = java.time.Instant.now().minus(java.time.Duration.ofHours(3));
+		var r = running("t", flow, old);
+		var deadline = java.time.Instant.now().plus(java.time.Duration.ofDays(1)).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+		assertTrue(exRepo.update(r.waitAt("n1", deadline, "needs approval", Map.of())));
+
+		exRepo.findRunningStartedBefore(java.time.Instant.now());
+		new RecoveryService(exRepo, idemRepo, java.time.Duration.ofHours(1)).recover();
+
+		var got = executions.get("t", r.id());
+		assertEquals(ExecutionStatus.WAITING, got.status());
+		assertEquals("n1", got.waitingNodeId());
+		assertEquals("needs approval", got.waitReason());
+		assertEquals(deadline, got.waitDeadline());
+		assertEquals(null, got.completedAt());
+	}
+
 	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.flow.FlowDefinition flow,
 			java.time.Instant startedAt) {
 		var p = FlowExecution.pending(tenant, flow, null, Map.of());

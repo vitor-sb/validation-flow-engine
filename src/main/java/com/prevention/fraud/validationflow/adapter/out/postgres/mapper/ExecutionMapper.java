@@ -34,13 +34,17 @@ public final class ExecutionMapper {
 		e.completedAt = f.completedAt();
 		e.parentExecutionId = f.parentExecutionId();
 		e.parentNodeId = f.parentNodeId();
+		e.waitingNodeId = f.waitingNodeId();
+		e.waitDeadline = f.waitDeadline();
+		e.waitReason = f.waitReason();
 		return e;
 	}
 
 	public static FlowExecution toDomain(FlowExecutionEntity e) {
 		return new FlowExecution(e.id, e.tenantId, e.flowDefinitionId, e.flowKey, e.flowVersion, e.flowSnapshot,
 				e.correlationId, e.status, e.inputData, e.contextData, e.result, e.errorInfo, e.lockVersion,
-				e.startedAt, e.completedAt, e.parentExecutionId, e.parentNodeId);
+				e.startedAt, e.completedAt, e.parentExecutionId, e.parentNodeId, e.waitingNodeId, e.waitDeadline,
+				e.waitReason);
 	}
 
 	public static NodeExecutionEntity toEntity(String tenantId, UUID executionId, String nodeId, String nodeType, int attempt,

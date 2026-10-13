@@ -71,4 +71,13 @@ public class FlowExecutionEntity extends AssignedIdEntity {
 	@Column(name = "parent_node_id")
 	public String parentNodeId;
 
+	@Column(name = "waiting_node_id")
+	public String waitingNodeId;
+
+	@Column(name = "wait_deadline")
+	public Instant waitDeadline;
+
+	@Column(name = "wait_reason")
+	public String waitReason;
+
 }
