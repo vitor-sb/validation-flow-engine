@@ -34,7 +34,7 @@ class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 				List<SimpleGrantedAuthority> scopes = k.scopes() == null ? List.of()
 						: k.scopes().stream().map(s -> new SimpleGrantedAuthority("SCOPE_" + s)).toList();
 				SecurityContextHolder.getContext().setAuthentication(
-						UsernamePasswordAuthenticationToken.authenticated(new TenantPrincipal(k.tenantId()), null, scopes));
+						UsernamePasswordAuthenticationToken.authenticated(new TenantPrincipal(k.tenantId(), k.name() != null ? k.name() : k.tenantId()), null, scopes));
 			});
 		}
 		chain.doFilter(request, response);

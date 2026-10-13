@@ -443,7 +443,7 @@ paths:
   /api/v1/node-types:
     get:
       description: All validator types registered in this deployment.
-      operationId: list_2
+      operationId: list_3
       responses:
         "200":
           content:
@@ -504,6 +504,74 @@ paths:
       summary: Get a node type
       tags:
       - Node Types
+  /api/v1/providers:
+    get:
+      description: Tenant's rows only. Credentials appear as references.
+      operationId: list_2
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderConfigResponse"
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - provider:read
+      summary: List provider configurations
+      tags:
+      - Provider Configuration
+  /api/v1/providers/{providerKey}:
+    put:
+      description: 404 when no adapter is registered for `providerKey`; `baseUrl`
+        must be https outside the `local` profile. Records `updatedBy` and an audit
+        entry.
+      operationId: put
+      parameters:
+      - in: path
+        name: providerKey
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderConfigRequest"
+        required: true
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - provider:admin
+      summary: Create or replace a provider configuration
+      tags:
+      - Provider Configuration
 components:
   responses:
     BadRequest:
@@ -805,6 +873,56 @@ components:
             properties:
               threshold:
                 type: number
+    ProviderConfigRequest:
+      type: object
+      properties:
+        baseUrl:
+          type: string
+          example: https://brasilapi.com.br/api
+          maxLength: 500
+          minLength: 0
+        connectTimeoutMs:
+          type: integer
+          format: int32
+          example: 2000
+          exclusiveMinimum: 0
+        credentialsRef:
+          type: string
+          description: "Name of the secret (e.g. an environment variable), never the\
+            \ secret itself"
+          example: BUREAU_TOKEN
+          maxLength: 200
+          minLength: 0
+        enabled:
+          type: boolean
+        readTimeoutMs:
+          type: integer
+          format: int32
+          example: 5000
+          exclusiveMinimum: 0
+    ProviderConfigResponse:
+      type: object
+      properties:
+        baseUrl:
+          type: string
+        connectTimeoutMs:
+          type: integer
+          format: int32
+        credentialsRef:
+          type: string
+          description: Reference to the secret; the secret is never returned
+        enabled:
+          type: boolean
+        providerKey:
+          type: string
+        readTimeoutMs:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
     StartRequest:
       type: object
       properties:

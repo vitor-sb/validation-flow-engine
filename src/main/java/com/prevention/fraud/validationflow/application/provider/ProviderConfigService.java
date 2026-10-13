@@ -3,6 +3,7 @@ package com.prevention.fraud.validationflow.application.provider;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -30,6 +31,19 @@ public class ProviderConfigService {
 				old != null && old.loadedAt().plus(ttl).isAfter(now) ? old
 						: new Entry(repository.find(tenantId, providerKey).filter(ProviderConfig::enabled), now));
 		return entry.config();
+	}
+
+	/** Persists the row (the repository audits it) and drops the cached entry, so this process sees it at once. */
+	public ProviderConfig save(ProviderConfig config) {
+		var saved = new ProviderConfig(config.tenantId(), config.providerKey(), config.enabled(), config.baseUrl(),
+				config.connectTimeoutMs(), config.readTimeoutMs(), config.credentialsRef(), config.updatedBy(), clock.instant());
+		repository.save(saved);
+		invalidate(saved.tenantId(), saved.providerKey());
+		return saved;
+	}
+
+	public List<ProviderConfig> list(String tenantId) {
+		return repository.findAll(tenantId);
 	}
 
 	/** Drops the cached entry so the next resolve reads the database. */

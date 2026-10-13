@@ -13,7 +13,8 @@ record ApiKeyProperties(List<ApiKey> apiKeys) {
 		apiKeys = apiKeys == null ? List.of() : apiKeys;
 	}
 
-	record ApiKey(String key, String tenantId, Set<String> scopes) {
+	/** {@code name} is an optional label for audit trails; it defaults to the tenant. */
+	record ApiKey(String key, String tenantId, Set<String> scopes, String name) {
 	}
 
 }
