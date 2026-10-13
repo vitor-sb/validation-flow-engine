@@ -1,5 +1,12 @@
-# Perfil de desenvolvimento local: lê o arquivo .env da raiz (veja .env.example).
-# Ative com SPRING_PROFILES_ACTIVE=local (acrescente ",loadtest" para ter o validator fake).
+server:
+  port: 8081
+
+springdoc:
+  swagger-ui:
+    enabled: true
+  api-docs:
+    enabled: true
+
 spring:
   config:
     import: optional:file:.env[.properties]

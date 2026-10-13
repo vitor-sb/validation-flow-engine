@@ -23,4 +23,6 @@ logging:
 springdoc:
   swagger-ui:
     enabled: false
+  api-docs:
+    enabled: false
   writer-with-order-by-keys: true
