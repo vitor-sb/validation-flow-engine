@@ -1,5 +1,6 @@
 package com.prevention.fraud.validationflow.config;
 
+import java.time.Clock;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -10,12 +11,20 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiCnpjProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository;
+import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ProviderBackedValidator;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 
 /** Wires external data providers as validators. Each one is opt-in, so a default deployment makes no outbound calls. */
 @Configuration
 class ProviderConfig {
+
+	@Bean
+	ProviderConfigService providerConfigService(ProviderConfigRepository repository,
+			@Value("${app.providers.config-cache-ttl:PT30S}") Duration ttl) {
+		return new ProviderConfigService(repository, ttl, Clock.systemUTC());
+	}
 
 	@Bean
 	@ConditionalOnProperty(name = "app.providers.brasilapi.enabled", havingValue = "true")
