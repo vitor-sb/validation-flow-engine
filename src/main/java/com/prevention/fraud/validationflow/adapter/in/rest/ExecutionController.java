@@ -97,6 +97,25 @@ class ExecutionController {
 		return e.status() == ExecutionStatus.WAITING ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
 	}
 
+	enum Decision {
+		APPROVED, REJECTED
+	}
+
+	record ResumeRequest(@NotNull Decision decision, @Size(max = 1000) String note,
+			@Schema(description = "Free-form evidence of the decision (dynamic)", example = "{\"ticket\":\"T-1\"}") Map<String, Object> evidence) {
+	}
+
+	@PostMapping("/{id}/resume")
+	@Operation(summary = "Resume a waiting execution", description = "Continues from the waiting node over the original snapshot, following the transition labelled with the decision. Who decided, note and evidence go to the node history and the audit log.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:resume"))
+	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
+	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
+	@ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict")
+	ExecutionResponse resume(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id,
+			@Valid @RequestBody ResumeRequest r) {
+		return toResponse(service.resume(principal.tenantId(), id, r.decision().name(), r.note(), r.evidence(),
+				principal.subject()));
+	}
+
 	@GetMapping("/{id}")
 	@Operation(summary = "Get an execution", description = "Another tenant's id returns 404.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:read"))
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")

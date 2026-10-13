@@ -36,6 +36,7 @@ class SecurityConfig {
 						.requestMatchers(HttpMethod.GET, "/api/v1/flows/**", "/api/v1/node-types/**")
 								.hasAuthority("SCOPE_flow:read")
 						.requestMatchers(HttpMethod.POST, "/api/v1/executions").hasAuthority("SCOPE_validation:execute")
+						.requestMatchers(HttpMethod.POST, "/api/v1/executions/*/resume").hasAuthority("SCOPE_validation:resume")
 						.requestMatchers(HttpMethod.GET, "/api/v1/executions/**").hasAuthority("SCOPE_validation:read")
 						.requestMatchers(HttpMethod.GET, "/api/v1/providers").hasAuthority("SCOPE_provider:read")
 						.requestMatchers(HttpMethod.PUT, "/api/v1/providers/*").hasAuthority("SCOPE_provider:admin")

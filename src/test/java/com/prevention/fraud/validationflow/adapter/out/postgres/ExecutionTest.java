@@ -300,6 +300,60 @@ class ExecutionTest {
 	}
 
 	@Test
+	void resumeFollowsDecisionBranchOnceAndOnlyForTheTenant() throws Exception {
+		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),
+				"h", Map.of("type", "HUMAN_APPROVAL", "config", Map.of("reason", "review", "deadline", "PT1H"),
+						"transitions", List.of(Map.of("to", "ok", "label", "APPROVED"),
+								Map.of("to", "no", "label", "REJECTED"))),
+				"ok", Map.of("type", "END", "config", Map.of("tag", "ok")),
+				"no", Map.of("type", "END", "config", Map.of("tag", "no"))));
+		activate("k-resume", "CRESUME", g, List.of());
+		var approved = executions.execute("t", null, "PF", "CRESUME", Map.of(), null);
+		assertThrows(FlowException.class, () -> executions.resume("other", approved.id(), "APPROVED", null, null, "x"));
+		var done = executions.resume("t", approved.id(), "APPROVED", "fine", Map.of("ticket", "T-1"), "alice");
+		assertEquals(ExecutionStatus.COMPLETED, done.status());
+		assertEquals("ok", ((Map<?, ?>) done.result().get("config")).get("tag"));
+		assertEquals("alice", jdbc.queryForObject(
+				"SELECT output_data->>'decidedBy' FROM node_execution WHERE execution_id = ? AND node_id = 'h' AND attempt = 2",
+				String.class, approved.id()));
+		assertEquals(1, jdbc.queryForObject(
+				"SELECT count(*) FROM execution_audit_log WHERE execution_id = ? AND event_type = 'EXECUTION_RESUMED' AND details->>'note' = 'fine'",
+				Integer.class, approved.id()));
+		var nodesBefore = executions.nodes("t", approved.id()).size();
+		assertThrows(FlowException.class, () -> executions.resume("t", approved.id(), "APPROVED", null, null, "alice"));
+		assertEquals(nodesBefore, executions.nodes("t", approved.id()).size());
+
+		var rejected = executions.execute("t", null, "PF", "CRESUME", Map.of(), null);
+		var r = executions.resume("t", rejected.id(), "REJECTED", null, null, "bob");
+		assertEquals("no", ((Map<?, ?>) r.result().get("config")).get("tag"));
+
+		var racing = executions.execute("t", null, "PF", "CRESUME", Map.of(), null);
+		var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+		var go = new java.util.concurrent.CountDownLatch(1);
+		List<java.util.concurrent.Future<Boolean>> fs = new java.util.ArrayList<>();
+		for (int i = 0; i < 2; i++) {
+			fs.add(pool.submit(() -> {
+				go.await();
+				try {
+					executions.resume("t", racing.id(), "APPROVED", null, null, "c");
+					return true;
+				}
+				catch (FlowException e) {
+					return false;
+				}
+			}));
+		}
+		go.countDown();
+		int wins = 0;
+		for (var f : fs) {
+			wins += f.get() ? 1 : 0;
+		}
+		pool.shutdown();
+		assertEquals(1, wins);
+	}
+
+	@Test
 	void handlersAreResolvedByTypeAndUnknownTypeFails() {
 		var ran = new java.util.concurrent.atomic.AtomicBoolean();
 		var startOnly = new ExecutionService(flows, exRepo,

@@ -97,7 +97,7 @@ public class ExecutionService {
 		try {
 			List<String> path = new ArrayList<>(chain);
 			path.add(ex.flowKey());
-			FlowExecution done = walk(ex, ctx, outputs, path);
+			FlowExecution done = walk(ex, ctx, outputs, path, (String) ex.snapshot().get("startNodeId"));
 			recorder.finished(done);
 			return done;
 		}
@@ -111,9 +111,8 @@ public class ExecutionService {
 	}
 
 	private FlowExecution walk(FlowExecution ex, Map<String, Object> ctx, Map<String, Object> outputs,
-			List<String> chain) {
+			List<String> chain, String id) {
 		Map<String, Object> nodes = Maps.of(ex.snapshot().get("nodes"));
-		String id = (String) ex.snapshot().get("startNodeId");
 		while (true) {
 			Map<String, Object> node = Maps.of(nodes.get(id));
 			String type = (String) node.get("type");
@@ -142,6 +141,60 @@ public class ExecutionService {
 				return save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition matched at node " + id));
 			}
 			id = next;
+		}
+	}
+
+	/**
+	 * Resumes a WAITING execution of the tenant from its waiting node, over the original snapshot, following the
+	 * transition labelled with {@code decision}. 409 if it is not WAITING or another resume won the race.
+	 */
+	public FlowExecution resume(String tenantId, UUID id, String decision, String note, Map<String, Object> evidence,
+			String actor) {
+		FlowExecution waiting = get(tenantId, id);
+		if (waiting.status() != ExecutionStatus.WAITING) {
+			throw FlowException.conflict("execution is not waiting (status " + waiting.status() + ")");
+		}
+		String nodeId = waiting.waitingNodeId();
+		Map<String, Object> node = Maps.of(Maps.of(waiting.snapshot().get("nodes")).get(nodeId));
+		String next = Maps.list(node.get("transitions")).stream().filter(t -> decision.equals(t.get("label")))
+				.map(t -> (String) t.get("to")).findFirst().orElse(null);
+		FlowExecution ex;
+		try {
+			ex = save(waiting.resume());
+		}
+		catch (IllegalStateException e) {
+			throw FlowException.conflict("execution was modified concurrently");
+		}
+		Map<String, Object> ctx = new HashMap<>(ex.contextData());
+		Map<String, Object> outputs = new LinkedHashMap<>(Maps.of(ctx.get("nodes")));
+		ctx.put("nodes", outputs);
+		var outerMdc = recorder.enterMdc(ex, ex.correlationId());
+		try {
+			Map<String, Object> decided = new LinkedHashMap<>();
+			decided.put("decision", decision);
+			decided.put("decidedBy", actor);
+			if (note != null) {
+				decided.put("note", note);
+			}
+			if (evidence != null) {
+				decided.put("evidence", evidence);
+			}
+			outputs.put(nodeId, decided);
+			recorder.recordNode(ex, nodeId, (String) node.get("type"), 2, "COMPLETED", decided, null, ctx, Instant.now());
+			repository.audit(tenantId, id, "EXECUTION_RESUMED", nodeId, decided);
+			if (next == null) {
+				return save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition for decision at node " + nodeId));
+			}
+			FlowExecution done = walk(ex, ctx, outputs, List.of(ex.flowKey()), next);
+			recorder.finished(done);
+			return done;
+		}
+		catch (RuntimeException e) {
+			recorder.failed(e, ctx);
+			return save(ex.fail(ctx, "EXECUTION_ERROR", UNEXPECTED, false, Map.of("exception", e.getClass().getName())));
+		}
+		finally {
+			recorder.restoreMdc(outerMdc);
 		}
 	}
 

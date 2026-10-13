@@ -180,6 +180,42 @@ paths:
       summary: List node attempts
       tags:
       - Execution
+  /api/v1/executions/{id}/resume:
+    post:
+      description: "Continues from the waiting node over the original snapshot, following\
+        \ the transition labelled with the decision. Who decided, note and evidence\
+        \ go to the node history and the audit log."
+      operationId: resume
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeRequest"
+        required: true
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - validation:resume
+      summary: Resume a waiting execution
+      tags:
+      - Execution
   /api/v1/flows:
     get:
       description: "Tenant's flows, newest first; filters are optional. `size` is\
@@ -931,6 +967,26 @@ components:
           format: date-time
         updatedBy:
           type: string
+    ResumeRequest:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+        evidence:
+          type: object
+          additionalProperties: {}
+          description: Free-form evidence of the decision (dynamic)
+          example:
+            ticket: T-1
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - decision
     StartRequest:
       type: object
       properties:
