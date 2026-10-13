@@ -98,6 +98,12 @@ paths:
                 enum:
                 - "true"
               style: simple
+        "202":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ExecutionResponse"
+          description: Execution created and parked in WAITING (a node paused it)
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":

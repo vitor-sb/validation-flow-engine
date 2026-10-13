@@ -2,6 +2,7 @@ package com.prevention.fraud.validationflow.application.execution.node;
 
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -11,6 +12,12 @@ public record NodeStep(FlowExecution ex, String nodeId, String type, NodeConfig 
 
 	public FlowExecution fail(String code, String message) {
 		return host.save(ex.fail(ctx, code, message));
+	}
+
+	/** Parks the execution in WAITING at this node (history entry PENDING) and returns it; return it from {@link NodeHandler#handle}. */
+	public FlowExecution pause(String reason, Instant deadline) {
+		host.recorder().recordNode(ex, nodeId, type, 1, "PENDING", Map.of(), null, ctx, Instant.now());
+		return host.save(ex.waitAt(nodeId, deadline, reason, ctx));
 	}
 
 }

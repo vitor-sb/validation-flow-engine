@@ -251,6 +251,36 @@ class ExecutionTest {
 	}
 
 	@Test
+	void pausingHandlerParksExecutionAndIdempotentReplayReturnsIt() {
+		var pausing = new ExecutionService(flows, exRepo,
+				List.of(new com.prevention.fraud.validationflow.application.execution.node.NodeHandler() {
+					public String type() {
+						return "START";
+					}
+
+					public FlowExecution handle(com.prevention.fraud.validationflow.application.execution.node.NodeStep step) {
+						return step.pause("needs a person", java.time.Instant.parse("2030-01-01T00:00:00Z"));
+					}
+				}), new MicrometerExecutionMetrics(meters));
+		activate("k-pause", "CP", graph(true, "v1"), List.of());
+		var idem = new com.prevention.fraud.validationflow.application.execution.idempotency.IdempotentExecutionService(
+				pausing, idemRepo, java.time.Duration.ofMinutes(1));
+		var first = idem.executeIdempotent("t", "pause-key", "k-pause", "PF", "CP", Map.of(), null);
+		FlowExecution f = first.execution();
+		assertEquals(ExecutionStatus.WAITING, f.status());
+		assertEquals("needs a person", f.waitReason());
+		assertEquals("s", f.waitingNodeId());
+		assertEquals(java.time.Instant.parse("2030-01-01T00:00:00Z"), f.waitDeadline());
+		assertEquals(null, f.completedAt());
+		assertEquals("PENDING", jdbc.queryForObject("SELECT status FROM node_execution WHERE execution_id = ?",
+				String.class, f.id()));
+		var replay = idem.executeIdempotent("t", "pause-key", "k-pause", "PF", "CP", Map.of(), null);
+		assertTrue(replay.replayed());
+		assertEquals(f.id(), replay.execution().id());
+		assertEquals(ExecutionStatus.WAITING, replay.execution().status());
+	}
+
+	@Test
 	void handlersAreResolvedByTypeAndUnknownTypeFails() {
 		var ran = new java.util.concurrent.atomic.AtomicBoolean();
 		var startOnly = new ExecutionService(flows, exRepo,

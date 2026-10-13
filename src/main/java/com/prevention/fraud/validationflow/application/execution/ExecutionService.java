@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import com.prevention.fraud.validationflow.domain.flow.ConditionEvaluator;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
+import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
@@ -64,7 +65,9 @@ public class ExecutionService {
 		FlowDefinition flow = flows.resolveActive(tenantId, flowKey, userType, context);
 		var started = Instant.now();
 		FlowExecution done = run(tenantId, flow, correlationId, inputData, null, null, List.of(), new HashMap<>());
-		recorder.executionFinished(done.status().name(), Duration.between(started, Instant.now()));
+		if (done.status() != ExecutionStatus.WAITING) {
+			recorder.executionFinished(done.status().name(), Duration.between(started, Instant.now()));
+		}
 		return done;
 	}
 

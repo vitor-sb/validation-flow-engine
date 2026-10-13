@@ -7,7 +7,7 @@ public interface NodeHandler {
 
 	public String type();
 
-	/** Returns the terminal execution (END or failure), or null to continue with the node's transitions. */
+	/** Returns the terminal or WAITING execution (END, failure, {@link NodeStep#pause}), or null to continue with the node's transitions. */
 	public FlowExecution handle(NodeStep step);
 
 }

@@ -28,6 +28,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.execution.idempotency.IdempotentExecutionService;
 import com.prevention.fraud.validationflow.config.security.TenantPrincipal;
+import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 import com.prevention.fraud.validationflow.domain.execution.NodeExecution;
 
@@ -70,6 +71,7 @@ class ExecutionController {
 
 	@PostMapping
 	@Operation(summary = "Start an execution", description = "Runs the ACTIVE flow synchronously. With `Idempotency-Key` (scoped to the tenant) a replay with the same payload returns the original execution, flagged with `Idempotent-Replayed: true`; a different payload returns 409. Keys are retained for a limited window (`app.retention.idempotency`); a replay after it runs the flow again.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:execute"))
+	@ApiResponse(responseCode = "202", description = "Execution created and parked in WAITING (a node paused it)")
 	@ApiResponse(responseCode = "201", description = "Execution created or replayed", headers = @Header(name = "Idempotent-Replayed", description = "`true` only when the response replays an earlier call with the same `Idempotency-Key`", schema = @Schema(type = "string", allowableValues = "true")))
 	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
@@ -80,14 +82,19 @@ class ExecutionController {
 		if (idempotencyKey != null && !idempotencyKey.isBlank()) {
 			var o = idempotent.executeIdempotent(principal.tenantId(), idempotencyKey, r.flowKey(), r.userType(),
 					r.context(), r.inputData(), r.correlationId());
-			var created = ResponseEntity.status(HttpStatus.CREATED);
+			var created = ResponseEntity.status(statusOf(o.execution()));
 			if (o.replayed()) {
 				created.header("Idempotent-Replayed", "true");
 			}
 			return created.body(toResponse(o.execution()));
 		}
-		return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(service.execute(principal.tenantId(),
-				r.flowKey(), r.userType(), r.context(), r.inputData(), r.correlationId())));
+		var ex = service.execute(principal.tenantId(), r.flowKey(), r.userType(), r.context(), r.inputData(),
+				r.correlationId());
+		return ResponseEntity.status(statusOf(ex)).body(toResponse(ex));
+	}
+
+	private static HttpStatus statusOf(FlowExecution e) {
+		return e.status() == ExecutionStatus.WAITING ? HttpStatus.ACCEPTED : HttpStatus.CREATED;
 	}
 
 	@GetMapping("/{id}")
