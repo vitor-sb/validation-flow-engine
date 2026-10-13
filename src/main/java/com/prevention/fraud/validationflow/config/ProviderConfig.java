@@ -10,7 +10,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import com.prevention.fraud.validationflow.adapter.out.credential.EnvCredentialResolver;
 import com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiCnpjProvider;
+import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ProviderBackedValidator;
@@ -24,6 +26,11 @@ class ProviderConfig {
 	ProviderConfigService providerConfigService(ProviderConfigRepository repository,
 			@Value("${app.providers.config-cache-ttl:PT30S}") Duration ttl) {
 		return new ProviderConfigService(repository, ttl, Clock.systemUTC());
+	}
+
+	@Bean
+	CredentialResolver credentialResolver() {
+		return new EnvCredentialResolver();
 	}
 
 	@Bean
