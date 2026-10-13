@@ -1,6 +1,6 @@
 # PRD: Validation Flow Engine (MVP)
 
-> Derivado de `tasks/validation-flow-engine-v0.1.md` (v0.1). Escopo: **somente MVP** (Fases 0–2 do roadmap + sub-flow simples). Caso de uso: **genérico, sem fluxo de negócio fixo**. Backend apenas.
+> Derivado de `validation-flow-engine-v0.1.md` (v0.1). Escopo: **somente MVP** (Fases 0–2 do roadmap + sub-flow simples). Caso de uso: **genérico, sem fluxo de negócio fixo**. Backend apenas.
 
 ## 1. Introdução / Visão geral
 
@@ -28,18 +28,22 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 > Todas as stories incluem "build e testes passam" (`mvn verify` ou equivalente). Não há UI no MVP.
 
 ### US-001: Esqueleto hexagonal do projeto
+
 **Description:** Como desenvolvedor, quero a estrutura de pacotes e as regras de dependência definidas para que o domínio fique isolado de framework e banco.
 
 **Acceptance Criteria:**
+
 - [ ] Projeto Spring Boot (Java 17+) com pacotes `domain`, `application`, `adapter/in/rest`, `adapter/out/postgres`, `config`
 - [ ] Teste de arquitetura (ex.: ArchUnit) falha se `domain` depender de outra camada ou `application` depender de `adapter`
 - [ ] Endpoints `/actuator/health` (liveness/readiness) e `/api/v1/health` respondem 200
 - [ ] Build e testes passam
 
 ### US-002: Schema PostgreSQL inicial
+
 **Description:** Como desenvolvedor, quero as tabelas do MVP versionadas por migration para persistir fluxos, execuções e histórico.
 
 **Acceptance Criteria:**
+
 - [ ] Migrations (Flyway ou Liquibase) criam `flow_definition`, `flow_execution`, `node_execution`, `execution_audit_log`, `idempotency_key`
 - [ ] Campos variáveis (`graph_definition`, `metadata`, `input_data`, `context_data`, `result`, `error_info`, snapshots) são `JSONB`
 - [ ] `UNIQUE(tenant_id, flow_key, version)` em `flow_definition`
@@ -49,9 +53,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-003: Autenticação com tenant e escopos
+
 **Description:** Como sistema consumidor, quero me autenticar com uma credencial ligada a um tenant para que meus dados fiquem isolados e minhas permissões sejam limitadas.
 
 **Acceptance Criteria:**
+
 - [ ] `tenantId` é resolvido da credencial (API key/token), nunca do corpo da requisição
 - [ ] Escopos suportados: `validation:execute`, `validation:read`, `flow:read`, `flow:write`, `flow:activate`
 - [ ] Credencial com apenas `validation:execute` recebe 403 em `POST /flows` e `PATCH /flows/{id}/activate`
@@ -60,9 +66,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-004: Criar fluxo em DRAFT
+
 **Description:** Como analista, quero cadastrar um fluxo em rascunho para depois validá-lo e ativá-lo.
 
 **Acceptance Criteria:**
+
 - [ ] `POST /api/v1/flows` aceita `flowKey`, `userType`, `context`, `displayName`, `description`, `graphDefinition`, `metadata`, contrato de entrada (campos obrigatórios/opcionais com tipos)
 - [ ] Fluxo criado com `status=DRAFT`, `version` gerada, `createdBy`/`createdAt` preenchidos
 - [ ] Campos `@NotBlank`/`@NotNull` inválidos retornam 400 com `ErrorResponse`
@@ -70,9 +78,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-005: Validação estrutural do grafo
+
 **Description:** Como analista, quero validar o grafo antes de ativar para não publicar um fluxo quebrado.
 
 **Acceptance Criteria:**
+
 - [ ] `POST /api/v1/flows/validate` valida sem persistir e retorna lista de erros
 - [ ] Detecta: ausência de `startNodeId`/node `START`, nenhum caminho até `END`, edge para node inexistente, ciclos (quando DAG), nodes inalcançáveis
 - [ ] Detecta: `validatorType` inexistente no registry, timeout/retry inválidos, condição ou mapping inválido, profundidade de sub-flow acima do limite
@@ -80,9 +90,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-006: Versionamento e ativação atômica
+
 **Description:** Como analista, quero ativar uma versão sem afetar execuções em andamento e sem editar versões ativas.
 
 **Acceptance Criteria:**
+
 - [ ] `PUT /flows/{flowId}` em fluxo `ACTIVE` cria nova versão `DRAFT`; a versão ativa não é alterada
 - [ ] `PATCH /flows/{flowId}/activate` roda a validação estrutural e rejeita (422) se inválida
 - [ ] Ativação arquiva a versão `ACTIVE` anterior do mesmo seletor na mesma transação
@@ -92,18 +104,22 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-007: Consulta e listagem de fluxos
+
 **Description:** Como analista, quero listar e consultar fluxos para auditar o que está publicado.
 
 **Acceptance Criteria:**
+
 - [ ] `GET /flows` com paginação e filtros (`flowKey`, `status`, `userType`, `context`)
 - [ ] `GET /flows/{flowId}` retorna definição completa
 - [ ] Fluxo de outro tenant retorna 404
 - [ ] Build e testes passam
 
 ### US-008: Resolução do fluxo ativo
+
 **Description:** Como engine, quero resolver a versão ativa a partir de `flowKey` ou de `(tenantId, userType, context)`.
 
 **Acceptance Criteria:**
+
 - [ ] Com `flowKey` informado, resolve a versão `ACTIVE` dessa chave no tenant
 - [ ] Sem `flowKey`, resolve por `(tenantId, userType, context)`
 - [ ] Nenhuma versão ativa encontrada: erro 404 com código `FLOW_NOT_FOUND`
@@ -112,9 +128,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-009: Avaliador de condições (Java puro)
+
 **Description:** Como analista, quero condições estruturadas sobre o payload para decidir o caminho do fluxo de forma segura e determinística.
 
 **Acceptance Criteria:**
+
 - [ ] Suporta `EQUALS`, `NOT_EQUALS`, `GREATER_THAN`, `GREATER_THAN_OR_EQUALS`, `LESS_THAN`, `LESS_THAN_OR_EQUALS`, `CONTAINS`, `IN`, `EXISTS`, `AND`, `OR`, `NOT`
 - [ ] `CONTAINS` exige coleção; `IN` compara valor com lista permitida
 - [ ] Campo ausente, nulo ou tipo incompatível resulta em `false`, nunca em `true` silencioso (teste por operador)
@@ -123,9 +141,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-010: Validator Registry (Strategy)
+
 **Description:** Como desenvolvedor, quero registrar novos validators por chave estável sem tocar no executor.
 
 **Acceptance Criteria:**
+
 - [ ] Interface `ValidatorStrategy { String key(); ValidationResult execute(ValidationInput) }` na camada `application`
 - [ ] Registry descobre beans `ValidatorStrategy` automaticamente e rejeita chaves duplicadas na inicialização
 - [ ] Teste adiciona um validator fake novo e executa um fluxo com ele sem alterar código do executor
@@ -133,9 +153,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-011: Executor de grafo sequencial e condicional
+
 **Description:** Como sistema consumidor, quero iniciar uma validação e obter a decisão após o grafo ser percorrido.
 
 **Acceptance Criteria:**
+
 - [ ] `POST /api/v1/executions` com `userType`, `context`, `inputData` (e `flowKey`/`correlationId` opcionais) cria a execução e retorna `executionId`, `flowKey`, `flowVersion`, `status`, `startedAt`
 - [ ] Contrato de entrada do fluxo é validado antes de iniciar o grafo; campo obrigatório ausente retorna 400
 - [ ] Executa nodes `START`, `VALIDATION`, `DECISION`, `END`; transições avaliadas na ordem, seguindo a primeira cuja condição é verdadeira
@@ -147,9 +169,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-012: Timeout e retry por node
+
 **Description:** Como analista, quero configurar timeout e retry por node para tratar indisponibilidade de forma consistente.
 
 **Acceptance Criteria:**
+
 - [ ] `config.timeout` (ISO-8601, ex.: `PT30S`) é aplicado; estouro marca a tentativa como `TIMED_OUT`
 - [ ] `config.retryPolicy` (`maxAttempts`, `backoff` fixo/exponencial) re-tenta apenas erros marcados `retryable`
 - [ ] Cada tentativa gera um registro em `node_execution` com `attempt` incrementado
@@ -158,9 +182,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-013: Histórico por node e consulta de execução
+
 **Description:** Como auditor, quero saber o que ocorreu em cada execução e por que a decisão foi tomada.
 
 **Acceptance Criteria:**
+
 - [ ] `node_execution` guarda `input_snapshot`, `output_data`, `error_info`, `attempt`, `started_at`, `completed_at`
 - [ ] Transições e conditions avaliadas (com valor observado) ficam registradas em `execution_audit_log`
 - [ ] `GET /executions/{id}` retorna status, resultado, `tenantId`-scoped; `GET /executions/{id}/nodes` retorna histórico; `GET /executions` lista com paginação
@@ -169,9 +195,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-014: Idempotência no início de execução
+
 **Description:** Como sistema consumidor, quero reenviar `POST /executions` com a mesma `Idempotency-Key` sem duplicar a operação.
 
 **Acceptance Criteria:**
+
 - [ ] Header `Idempotency-Key` aceito; escopo da chave = tenant
 - [ ] Repetição com mesma chave e mesmo payload retorna a execução original
 - [ ] Mesma chave com payload diferente retorna 409
@@ -179,9 +207,11 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-015: Sub-flow simples
+
 **Description:** Como analista, quero que um fluxo chame outro fluxo para reutilizar validações comuns.
 
 **Acceptance Criteria:**
+
 - [ ] Node `SUB_FLOW` aceita `flowKey` do filho, `inputMapping` e `outputMapping` (JSONPath), `onFailure` (`FAIL_PARENT`), `maxDepth`
 - [ ] Filho executa como `flow_execution` com `parent_execution_id`/`parent_node_id`; usa a versão ativa no momento da chamada (ver Questões em aberto)
 - [ ] Filho recebe só o subconjunto mapeado e não altera o contexto do pai; o pai recebe só o `outputMapping`
@@ -189,36 +219,44 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - [ ] Build e testes passam
 
 ### US-016: Multi-tenancy comprovada
+
 **Description:** Como responsável de segurança, quero evidência de que tenants não se enxergam.
 
 **Acceptance Criteria:**
+
 - [ ] Teste de integração: tenant A e B com mesma `flowKey`, fluxos e execuções distintas
 - [ ] Teste: tenant A não lê, ativa, arquiva nem executa fluxo do tenant B (404)
 - [ ] Execução registra `tenantId`, `flowVersion` e as conditions/dados de contexto usados
 - [ ] Build e testes passam
 
 ### US-017: Grupos de documentos na configuração do fluxo
+
 **Description:** Como analista, quero declarar grupos de documentos (obrigatórios, alternativos, condicionais) no fluxo para pedir documentos diferentes conforme o payload.
 
 **Acceptance Criteria:**
+
 - [ ] Grupo declarado em `config.params` do node ou no grafo, versionado no snapshot (sem cadastro global)
 - [ ] Suporta itens obrigatórios, alternativos (um entre N) e condicionais (via condition)
 - [ ] Condition `inputData.groups CONTAINS "X"` seleciona o grupo; resultado e documentos efetivamente aplicados são registrados na execução
 - [ ] Build e testes passam
 
 ### US-018: Teste de carga inicial
+
 **Description:** Como time, quero medir a capacidade real antes de assumir metas de escala.
 
 **Acceptance Criteria:**
+
 - [ ] Script de carga reproduzível (ex.: k6/Gatling) executando fluxo leve com validator fake
 - [ ] Relatório com throughput, latência p50/p95/p99 e uso de banco em uma máquina de referência documentada
 - [ ] Nenhuma meta de volume (35–50 mi/dia, 800–1.500/s) é tratada como requisito; resultado vira linha de base
 - [ ] Build e testes passam
 
 ### US-019: Documentação OpenAPI (`openapi.yaml`)
+
 **Description:** Como consumidor e como desenvolvedor, quero um contrato OpenAPI versionado para integrar e gerar clientes sem ler o código.
 
 **Acceptance Criteria:**
+
 - [ ] Arquivo `openapi.yaml` (OpenAPI 3.x) na raiz do módulo/repositório documenta todos os endpoints do MVP: gestão de fluxos, execuções, `/node-types`, health
 - [ ] Cada endpoint tem descrição, parâmetros (incl. header `Idempotency-Key`), schemas de request/response, códigos de erro (400, 401, 403, 404, 409, 422) com `ErrorResponse`, exemplos e escopo de segurança exigido
 - [ ] Schemas de `inputData`, `contextData`, `result` e `config` documentados como objetos dinâmicos com exemplo
@@ -284,7 +322,7 @@ O MVP entrega o núcleo: catálogo de fluxos versionados, validação estrutural
 - Mapeamento de JSONPath para `inputMapping`/`outputMapping` com biblioteca já aceita pelo projeto (ex.: Jayway JsonPath).
 - Testes: Testcontainers (PostgreSQL), unitários do avaliador e validação de grafo, concorrência para ativação e idempotência.
 - Evolução para callback: o consumidor poderá informar uma URL de callback por tenant/requisição; o engine responderá `RUNNING` e fará `POST` do resultado (com assinatura e retry). Não implementar no MVP; manter `executionId`/`status` como base da resposta e `GET /executions/{id}` como fallback de consulta.
-- `openapi.yaml` é *code-first*: gerado a partir dos controllers e DTOs (ex.: springdoc-openapi) e versionado no repositório; o código é a fonte da verdade.
+- `openapi.yaml` é _code-first_: gerado a partir dos controllers e DTOs (ex.: springdoc-openapi) e versionado no repositório; o código é a fonte da verdade.
 - Credenciais: mecanismo exato (API key vs JWT) depende do padrão corporativo (pergunta em aberto).
 
 ## 8. Métricas de sucesso
