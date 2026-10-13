@@ -15,6 +15,7 @@ public interface DataProvider {
 	String key();
 
 	/** Returns normalized data. Keep only the fields needed for decisions: the result is persisted in the node output. */
-	Map<String, Object> fetch(Map<String, Object> params);
+	/** {@code config} is the tenant's enabled row for this provider; null columns mean the adapter's defaults. */
+	Map<String, Object> fetch(ProviderConfig config, Map<String, Object> params);
 
 }

@@ -2,9 +2,10 @@ package com.prevention.fraud.validationflow.config;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -18,9 +19,11 @@ import com.prevention.fraud.validationflow.application.provider.ProviderConfigSe
 import com.prevention.fraud.validationflow.application.validator.ProviderBackedValidator;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 
-/** Wires external data providers as validators. Each one is opt-in, so a default deployment makes no outbound calls. */
+/** Wires external data providers as validators. Each is enabled per tenant in {@code provider_config}; no row means no outbound call. */
 @Configuration
 class ProviderConfig {
+
+	private static final String BRASILAPI_URL = "https://brasilapi.com.br/api";
 
 	@Bean
 	ProviderConfigService providerConfigService(ProviderConfigRepository repository,
@@ -34,22 +37,33 @@ class ProviderConfig {
 	}
 
 	@Bean
-	@ConditionalOnProperty(name = "app.providers.brasilapi.enabled", havingValue = "true")
-	BrasilApiCnpjProvider brasilApiCnpjProvider(
-			@Value("${app.providers.brasilapi.base-url:https://brasilapi.com.br/api}") String baseUrl,
-			// real socket timeouts so a cancelled attempt does not keep its thread; keep read below the node timeout
-			@Value("${app.providers.brasilapi.connect-timeout:PT2S}") Duration connectTimeout,
-			@Value("${app.providers.brasilapi.read-timeout:PT5S}") Duration readTimeout) {
-		var factory = new SimpleClientHttpRequestFactory();
-		factory.setConnectTimeout(connectTimeout);
-		factory.setReadTimeout(readTimeout);
-		return new BrasilApiCnpjProvider(RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build());
+	BrasilApiCnpjProvider brasilApiCnpjProvider() {
+		return new BrasilApiCnpjProvider(clients(BRASILAPI_URL, 2000, 5000));
 	}
 
 	@Bean
-	@ConditionalOnProperty(name = "app.providers.brasilapi.enabled", havingValue = "true")
-	ValidatorStrategy brasilApiCnpjValidator(BrasilApiCnpjProvider provider) {
-		return new ProviderBackedValidator("brasilapi-cnpj", provider);
+	ValidatorStrategy brasilApiCnpjValidator(BrasilApiCnpjProvider provider, ProviderConfigService configs) {
+		return new ProviderBackedValidator("brasilapi-cnpj", provider, configs);
+	}
+
+	/**
+	 * One RestClient per distinct (baseUrl, timeouts): a changed row maps to a new key and so to a rebuilt client.
+	 * Real socket timeouts so a cancelled attempt does not keep its thread; keep read below the node timeout.
+	 */
+	private static Function<com.prevention.fraud.validationflow.application.provider.ProviderConfig, RestClient> clients(
+			String defaultUrl, int defaultConnectMs, int defaultReadMs) {
+		record Settings(String baseUrl, int connectMs, int readMs) {
+		}
+		// ponytail: stale entries are never evicted; fine while rows change rarely, add a size cap if they churn
+		var cache = new ConcurrentHashMap<Settings, RestClient>();
+		return c -> cache.computeIfAbsent(new Settings(c.baseUrl() != null ? c.baseUrl() : defaultUrl,
+				c.connectTimeoutMs() != null ? c.connectTimeoutMs() : defaultConnectMs,
+				c.readTimeoutMs() != null ? c.readTimeoutMs() : defaultReadMs), k -> {
+					var factory = new SimpleClientHttpRequestFactory();
+					factory.setConnectTimeout(Duration.ofMillis(k.connectMs()));
+					factory.setReadTimeout(Duration.ofMillis(k.readMs()));
+					return RestClient.builder().baseUrl(k.baseUrl()).requestFactory(factory).build();
+				});
 	}
 
 }

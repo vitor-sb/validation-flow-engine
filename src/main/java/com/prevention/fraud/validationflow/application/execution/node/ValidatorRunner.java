@@ -58,7 +58,7 @@ public class ValidatorRunner {
 	}
 
 	/** Runs the validator up to retryPolicy.maxAttempts times. */
-	public Attempt run(String nodeId, ValidatorStrategy v, Map<String, Object> ctx, NodeConfig config,
+	public Attempt run(String tenantId, String nodeId, ValidatorStrategy v, Map<String, Object> ctx, NodeConfig config,
 			AttemptRecorder recorder) {
 		int max = config.retryPolicy().maxAttempts();
 		Duration timeout = config.timeout();
@@ -67,7 +67,7 @@ public class ValidatorRunner {
 			Map<String, Object> error;
 			Instant started = Instant.now();
 			try {
-				var r = call(v, ctx, config.raw(), timeout);
+				var r = call(v, tenantId, ctx, config.raw(), timeout);
 				recorder.record(attempt, r.success() ? "COMPLETED" : "FAILED", r.output() == null ? Map.of() : r.output(), null,
 						started);
 				return new Attempt(r, null, attempt);
@@ -121,9 +121,9 @@ public class ValidatorRunner {
 				GraphValidator.DEFAULT_MAX_DELAY.toMillis());
 	}
 
-	private ValidatorStrategy.ValidationResult call(ValidatorStrategy v, Map<String, Object> ctx,
+	private ValidatorStrategy.ValidationResult call(ValidatorStrategy v, String tenantId, Map<String, Object> ctx,
 			Map<String, Object> config, Duration timeout) throws TimeoutException {
-		var input = new ValidatorStrategy.ValidationInput(Map.copyOf(ctx), config);
+		var input = new ValidatorStrategy.ValidationInput(Map.copyOf(ctx), config, tenantId);
 		if (timeout == null) {
 			return v.execute(input);
 		}

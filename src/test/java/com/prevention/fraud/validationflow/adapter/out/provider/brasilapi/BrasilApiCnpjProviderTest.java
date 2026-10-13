@@ -1,6 +1,8 @@
 package com.prevention.fraud.validationflow.adapter.out.provider.brasilapi;
 
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
+import com.prevention.fraud.validationflow.application.provider.ProviderConfig;
+import java.time.Instant;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +24,9 @@ class BrasilApiCnpjProviderTest {
 
 	private static final String URL = "https://brasilapi.test/api/cnpj/v1/11222333000181";
 
+	private static final ProviderConfig CONFIG = new ProviderConfig("t", "brasilapi-cnpj", true, null, null, null, null,
+			"u", Instant.EPOCH);
+
 	private MockRestServiceServer server;
 
 	private BrasilApiCnpjProvider provider;
@@ -30,11 +35,12 @@ class BrasilApiCnpjProviderTest {
 	void setUp() {
 		RestClient.Builder builder = RestClient.builder().baseUrl("https://brasilapi.test/api");
 		server = MockRestServiceServer.bindTo(builder).build();
-		provider = new BrasilApiCnpjProvider(builder.build());
+		RestClient client = builder.build();
+		provider = new BrasilApiCnpjProvider(c -> client);
 	}
 
 	private Map<String, Object> fetch() {
-		return provider.fetch(Map.of("cnpj", "11.222.333/0001-81"));
+		return provider.fetch(CONFIG, Map.of("cnpj", "11.222.333/0001-81"));
 	}
 
 	@Test
@@ -85,7 +91,7 @@ class BrasilApiCnpjProviderTest {
 
 	@Test
 	void rejectsInvalidCnpjWithoutCallingOut() {
-		assertThatThrownBy(() -> provider.fetch(Map.of("cnpj", "123"))).isInstanceOfSatisfying(ProviderException.class,
+		assertThatThrownBy(() -> provider.fetch(CONFIG, Map.of("cnpj", "123"))).isInstanceOfSatisfying(ProviderException.class,
 				e -> {
 					assertThat(e.code()).isEqualTo("INVALID_INPUT");
 					assertThat(e.retryable()).isFalse();

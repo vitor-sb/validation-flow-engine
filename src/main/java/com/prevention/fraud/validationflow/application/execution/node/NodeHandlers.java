@@ -66,7 +66,7 @@ public final class NodeHandlers {
 			if (v == null) {
 				return s.fail("VALIDATOR_NOT_FOUND", "validator not registered at node " + s.nodeId());
 			}
-			var a = runner.run(s.nodeId(), v, s.ctx(), s.config(), (att, st, out, err, t) -> s.host().recorder()
+			var a = runner.run(s.ex().tenantId(), s.nodeId(), v, s.ctx(), s.config(), (att, st, out, err, t) -> s.host().recorder()
 					.recordNode(s.ex(), s.nodeId(), s.type(), att, st, out, err, s.ctx(), t));
 			if (a.error() != null) {
 				return s.host().save(s.ex().fail(s.ctx(), (String) a.error().get("code"),

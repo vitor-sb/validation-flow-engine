@@ -1,10 +1,12 @@
 package com.prevention.fraud.validationflow.adapter.out.provider.brasilapi;
 
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderConfig;
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
 import com.prevention.fraud.validationflow.domain.document.BrazilianDocuments;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
@@ -21,10 +23,11 @@ public class BrasilApiCnpjProvider implements DataProvider {
 	/** BrasilAPI's {@code situacao_cadastral} code for an active company. */
 	private static final int ACTIVE = 2;
 
-	private final RestClient http;
+	private final Function<ProviderConfig, RestClient> clients;
 
-	public BrasilApiCnpjProvider(RestClient http) {
-		this.http = http;
+	/** @param clients returns the (cached) client for a tenant's configuration */
+	public BrasilApiCnpjProvider(Function<ProviderConfig, RestClient> clients) {
+		this.clients = clients;
 	}
 
 	@Override
@@ -33,14 +36,14 @@ public class BrasilApiCnpjProvider implements DataProvider {
 	}
 
 	@Override
-	public Map<String, Object> fetch(Map<String, Object> params) {
+	public Map<String, Object> fetch(ProviderConfig config, Map<String, Object> params) {
 		String cnpj = BrazilianDocuments.normalize(String.valueOf(params.get("cnpj")));
 		if (!BrazilianDocuments.isValidCnpj(cnpj)) {
 			throw new ProviderException("INVALID_INPUT", "cnpj is not valid", false);
 		}
 		Map<String, Object> body;
 		try {
-			body = http.get().uri("/cnpj/v1/{cnpj}", cnpj).retrieve().body(new ParameterizedTypeReference<>() {
+			body = clients.apply(config).get().uri("/cnpj/v1/{cnpj}", cnpj).retrieve().body(new ParameterizedTypeReference<>() {
 			});
 		}
 		catch (RestClientResponseException e) {

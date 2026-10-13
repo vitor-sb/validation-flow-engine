@@ -1,6 +1,7 @@
 package com.prevention.fraud.validationflow.application.validator;
 
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -13,6 +14,8 @@ import java.util.Set;
  * <li>{@code expect} (optional): output field to the value it must have, e.g. {@code {"active": true}}. The step
  * succeeds only when every expectation matches (compared as strings); without it, any provider answer succeeds.</li>
  * </ul>
+ * The provider's configuration is resolved per execution by (tenant, key); a missing or disabled row fails with
+ * {@code PROVIDER_DISABLED}.
  */
 public class ProviderBackedValidator implements ValidatorStrategy {
 
@@ -20,9 +23,12 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 
 	private final DataProvider provider;
 
-	public ProviderBackedValidator(String key, DataProvider provider) {
+	private final ProviderConfigService configs;
+
+	public ProviderBackedValidator(String key, DataProvider provider, ProviderConfigService configs) {
 		this.key = key;
 		this.provider = provider;
+		this.configs = configs;
 	}
 
 	@Override
@@ -32,6 +38,8 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 
 	@Override
 	public ValidationResult execute(ValidationInput input) {
+		var config = configs.resolve(input.tenantId(), provider.key())
+				.orElseThrow(() -> new ValidatorException("PROVIDER_DISABLED", key + " is not enabled for this tenant", false));
 		Map<String, Object> params = asMap(input.config().get("params"));
 		Map<String, Object> inputData = asMap(input.data().get("inputData"));
 		Map<String, Object> query = new LinkedHashMap<>();
@@ -47,7 +55,7 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		}
 		Map<String, Object> data;
 		try {
-			data = provider.fetch(query);
+			data = provider.fetch(config, query);
 		}
 		catch (ProviderException e) {
 			throw new ValidatorException(e.code(), e.getMessage(), e.retryable());

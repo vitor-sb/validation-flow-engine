@@ -15,7 +15,12 @@ import java.util.Set;
  */
 public interface ValidatorStrategy {
 
-	record ValidationInput(Map<String, Object> data, Map<String, Object> config) {
+	record ValidationInput(Map<String, Object> data, Map<String, Object> config, String tenantId) {
+
+		public ValidationInput(Map<String, Object> data, Map<String, Object> config) {
+			this(data, config, null);
+		}
+
 	}
 
 	record ValidationResult(boolean success, Map<String, Object> output) {
