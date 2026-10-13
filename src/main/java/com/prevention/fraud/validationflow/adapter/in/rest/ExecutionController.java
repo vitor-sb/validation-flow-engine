@@ -116,6 +116,19 @@ class ExecutionController {
 				principal.subject()));
 	}
 
+	record CancelRequest(@Size(max = 1000) String reason) {
+	}
+
+	@PostMapping("/{id}/cancel")
+	@Operation(summary = "Cancel a waiting execution", description = "Only WAITING executions can be cancelled; RUNNING and final states return 409.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:cancel"))
+	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
+	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
+	@ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict")
+	ExecutionResponse cancel(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable UUID id,
+			@Valid @RequestBody(required = false) CancelRequest r) {
+		return toResponse(service.cancel(principal.tenantId(), id, r == null ? null : r.reason(), principal.subject()));
+	}
+
 	@GetMapping("/{id}")
 	@Operation(summary = "Get an execution", description = "Another tenant's id returns 404.", security = @SecurityRequirement(name = "apiKey", scopes = "validation:read"))
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")

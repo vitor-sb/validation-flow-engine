@@ -354,6 +354,28 @@ class ExecutionTest {
 	}
 
 	@Test
+	void cancelOnlyWaitingAndOnlyForTheTenant() {
+		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),
+				"h", Map.of("type", "HUMAN_APPROVAL", "config", Map.of("reason", "review", "deadline", "PT1H"),
+						"transitions", List.of(Map.of("to", "e", "label", "APPROVED"),
+								Map.of("to", "e", "label", "REJECTED"))),
+				"e", Map.of("type", "END")));
+		activate("k-cancel", "CCANCEL", g, List.of());
+		var w = executions.execute("t", null, "PF", "CCANCEL", Map.of(), null);
+		assertThrows(FlowException.class, () -> executions.cancel("other", w.id(), null, "x"));
+		var c = executions.cancel("t", w.id(), "no longer needed", "alice");
+		assertEquals(ExecutionStatus.CANCELLED, c.status());
+		assertTrue(c.completedAt() != null);
+		assertEquals("no longer needed", c.errorInfo().get("reason"));
+		assertEquals(1, jdbc.queryForObject(
+				"SELECT count(*) FROM execution_audit_log WHERE execution_id = ? AND event_type = 'EXECUTION_CANCELLED' AND details->>'cancelledBy' = 'alice'",
+				Integer.class, w.id()));
+		assertThrows(FlowException.class, () -> executions.cancel("t", w.id(), null, "alice"));
+		assertThrows(FlowException.class, () -> executions.resume("t", w.id(), "APPROVED", null, null, "alice"));
+	}
+
+	@Test
 	void handlersAreResolvedByTypeAndUnknownTypeFails() {
 		var ran = new java.util.concurrent.atomic.AtomicBoolean();
 		var startOnly = new ExecutionService(flows, exRepo,

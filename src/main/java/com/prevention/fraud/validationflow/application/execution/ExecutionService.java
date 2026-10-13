@@ -198,6 +198,31 @@ public class ExecutionService {
 		}
 	}
 
+	/** Cancels a WAITING execution of the tenant. RUNNING and final states are 409 (no cooperative cancellation). */
+	public FlowExecution cancel(String tenantId, UUID id, String reason, String actor) {
+		FlowExecution ex = get(tenantId, id);
+		if (ex.status() != ExecutionStatus.WAITING) {
+			throw FlowException.conflict(ex.status() == ExecutionStatus.RUNNING
+					? "execution is running; only WAITING executions can be cancelled"
+					: "execution already finished (status " + ex.status() + ")");
+		}
+		String nodeId = ex.waitingNodeId();
+		FlowExecution done;
+		try {
+			done = save(ex.cancel(reason));
+		}
+		catch (IllegalStateException e) {
+			throw FlowException.conflict("execution was modified concurrently");
+		}
+		Map<String, Object> details = new LinkedHashMap<>();
+		details.put("cancelledBy", actor);
+		if (reason != null) {
+			details.put("reason", reason);
+		}
+		repository.audit(tenantId, id, "EXECUTION_CANCELLED", nodeId, details);
+		return done;
+	}
+
 	public ExecutionRecorder recorder() {
 		return recorder;
 	}

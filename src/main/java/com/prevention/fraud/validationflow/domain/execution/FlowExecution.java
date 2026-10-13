@@ -52,6 +52,11 @@ public record FlowExecution(UUID id, String tenantId, UUID flowDefinitionId, Str
 		return to(ExecutionStatus.CANCELLED, Set.of(ExecutionStatus.WAITING), contextData, null, null);
 	}
 
+	public FlowExecution cancel(String reason) {
+		return to(ExecutionStatus.CANCELLED, Set.of(ExecutionStatus.WAITING), contextData, null,
+				reason == null ? null : Map.of("code", "CANCELLED", "reason", reason));
+	}
+
 	public FlowExecution timeOut(Map<String, Object> error) {
 		return to(ExecutionStatus.TIMED_OUT, Set.of(ExecutionStatus.WAITING), contextData, null, error);
 	}

@@ -150,6 +150,40 @@ paths:
       summary: Get an execution
       tags:
       - Execution
+  /api/v1/executions/{id}/cancel:
+    post:
+      description: Only WAITING executions can be cancelled; RUNNING and final states
+        return 409.
+      operationId: cancel
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelRequest"
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - validation:cancel
+      summary: Cancel a waiting execution
+      tags:
+      - Execution
   /api/v1/executions/{id}/nodes:
     get:
       description: "One entry per node attempt, with masked snapshots."
@@ -701,6 +735,13 @@ components:
       description: "The flow graph is invalid (INVALID_FLOW); details list `CODE:\
         \ message` per problem."
   schemas:
+    CancelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 0
     CreateFlowRequest:
       type: object
       properties:
