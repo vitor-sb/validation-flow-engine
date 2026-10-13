@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
+import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
+import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import com.prevention.fraud.validationflow.domain.flow.FlowDefinition;
 import com.prevention.fraud.validationflow.domain.flow.FlowStatus;
 import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
@@ -22,9 +25,38 @@ public class FlowService {
 
 	private final GraphValidator graphValidator;
 
+	private final ValidatorRegistry validators;
+
+	private final ProviderConfigService providers;
+
 	public FlowService(FlowRepository repository, GraphValidator graphValidator) {
+		this(repository, graphValidator, null, null);
+	}
+
+	public FlowService(FlowRepository repository, GraphValidator graphValidator, ValidatorRegistry validators,
+			ProviderConfigService providers) {
 		this.repository = repository;
 		this.graphValidator = graphValidator;
+		this.validators = validators;
+		this.providers = providers;
+	}
+
+	/** One PROVIDER_DISABLED entry per node whose validator is backed by a provider that is disabled for the tenant. */
+	@SuppressWarnings("unchecked")
+	public List<GraphValidator.GraphError> disabledProviders(String tenantId, Map<String, Object> graph) {
+		List<GraphValidator.GraphError> out = new java.util.ArrayList<>();
+		if (validators == null || !(graph.get("nodes") instanceof Map<?, ?> nodes)) {
+			return out;
+		}
+		((Map<String, Map<String, Object>>) nodes).forEach((nodeId, node) -> {
+			if (node.get("config") instanceof Map<?, ?> cfg && cfg.get("validatorType") instanceof String type) {
+				validators.find(type).map(ValidatorStrategy::providerKey)
+						.filter(key -> providers.resolve(tenantId, key).isEmpty())
+						.ifPresent(key -> out.add(new GraphValidator.GraphError("PROVIDER_DISABLED", nodeId,
+								"provider " + key + " is disabled for this tenant")));
+			}
+		});
+		return out;
 	}
 
 	// ponytail: version = max+1 read then insert; a concurrent create of the same key hits the unique constraint (409 via RestExceptionHandler). Retry server-side if clients need it hidden.
@@ -97,6 +129,10 @@ public class FlowService {
 		}
 		if (!errors.isEmpty()) {
 			throw FlowException.invalid(errors);
+		}
+		List<GraphValidator.GraphError> disabled = disabledProviders(tenantId, f.graphDefinition());
+		if (!disabled.isEmpty()) {
+			throw FlowException.conflict("flow uses disabled providers", disabled);
 		}
 		if (!repository.activate(tenantId, id)) {
 			throw FlowException.conflict("flow is no longer a draft");

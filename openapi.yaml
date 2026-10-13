@@ -271,7 +271,8 @@ paths:
   /api/v1/flows/validate:
     post:
       description: Checks a graph definition without persisting anything. Always 200;
-        `valid=false` lists the problems.
+        `valid=false` lists the problems; `warnings` (non-blocking) flags nodes whose
+        provider is disabled for the tenant.
       operationId: validate
       requestBody:
         content:
@@ -364,8 +365,9 @@ paths:
       - Flow Management
   /api/v1/flows/{id}/activate:
     patch:
-      description: Validates the graph (422 INVALID_FLOW when invalid) and atomically
-        archives the currently ACTIVE version of the same userType/context.
+      description: Validates the graph (422 INVALID_FLOW when invalid; 409 listing
+        the nodes whose provider is disabled for the tenant) and atomically archives
+        the currently ACTIVE version of the same userType/context.
       operationId: activate
       parameters:
       - in: path

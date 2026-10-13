@@ -74,6 +74,11 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 	}
 
 	@Override
+	public String providerKey() {
+		return provider.key();
+	}
+
+	@Override
 	public Set<String> capabilities() {
 		return Set.of("EXTERNAL_PROVIDER", "RETRY", "TIMEOUT");
 	}

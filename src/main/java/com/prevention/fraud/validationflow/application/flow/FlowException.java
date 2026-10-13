@@ -31,6 +31,10 @@ public class FlowException extends RuntimeException {
 		return new FlowException(Kind.CONFLICT, message, List.of());
 	}
 
+	public static FlowException conflict(String message, List<GraphError> errors) {
+		return new FlowException(Kind.CONFLICT, message, errors);
+	}
+
 	public static FlowException invalidConfiguration(String message) {
 		return new FlowException(Kind.INVALID_CONFIGURATION, message, List.of());
 	}

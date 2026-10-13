@@ -68,7 +68,7 @@ class FlowController {
 	record ValidateRequest(@NotNull @Schema(description = "Graph: `startNodeId` + `nodes` map (type, dynamic `config`, `transitions`)", example = "{\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"type\":\"START\",\"transitions\":[{\"to\":\"end\"}]},\"end\":{\"type\":\"END\"}}}") Map<String, Object> graphDefinition) {
 	}
 
-	record ValidateResponse(boolean valid, List<GraphValidator.GraphError> errors) {
+	record ValidateResponse(boolean valid, List<GraphValidator.GraphError> errors, List<GraphValidator.GraphError> warnings) {
 	}
 
 	private final FlowService service;
@@ -81,11 +81,12 @@ class FlowController {
 	}
 
 	@PostMapping("/validate")
-	@Operation(summary = "Validate a graph", description = "Checks a graph definition without persisting anything. Always 200; `valid=false` lists the problems.", security = @SecurityRequirement(name = "apiKey", scopes = "flow:write"))
+	@Operation(summary = "Validate a graph", description = "Checks a graph definition without persisting anything. Always 200; `valid=false` lists the problems; `warnings` (non-blocking) flags nodes whose provider is disabled for the tenant.", security = @SecurityRequirement(name = "apiKey", scopes = "flow:write"))
 	@ApiResponse(responseCode = "400", ref = "#/components/responses/BadRequest")
-	ValidateResponse validate(@Valid @RequestBody ValidateRequest r) {
+	ValidateResponse validate(@AuthenticationPrincipal TenantPrincipal principal, @Valid @RequestBody ValidateRequest r) {
 		List<GraphValidator.GraphError> errors = graphValidator.validate(r.graphDefinition());
-		return new ValidateResponse(errors.isEmpty(), errors);
+		return new ValidateResponse(errors.isEmpty(), errors,
+				service.disabledProviders(principal.tenantId(), r.graphDefinition()));
 	}
 
 	@PostMapping
@@ -135,7 +136,7 @@ class FlowController {
 	}
 
 	@PatchMapping("/{id}/activate")
-	@Operation(summary = "Activate a DRAFT", description = "Validates the graph (422 INVALID_FLOW when invalid) and atomically archives the currently ACTIVE version of the same userType/context.", security = @SecurityRequirement(name = "apiKey", scopes = "flow:activate"))
+	@Operation(summary = "Activate a DRAFT", description = "Validates the graph (422 INVALID_FLOW when invalid; 409 listing the nodes whose provider is disabled for the tenant) and atomically archives the currently ACTIVE version of the same userType/context.", security = @SecurityRequirement(name = "apiKey", scopes = "flow:activate"))
 	@ApiResponse(responseCode = "404", ref = "#/components/responses/NotFound")
 	@ApiResponse(responseCode = "409", ref = "#/components/responses/Conflict")
 	@ApiResponse(responseCode = "422", ref = "#/components/responses/Unprocessable")

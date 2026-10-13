@@ -35,6 +35,11 @@ public interface ValidatorStrategy {
 		return Map.of();
 	}
 
+	/** Key of the {@code DataProvider} behind this validator (matches {@code provider_config.provider_key}); null when none. */
+	default String providerKey() {
+		return null;
+	}
+
 	default Set<String> capabilities() {
 		return Set.of();
 	}

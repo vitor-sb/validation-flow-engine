@@ -19,8 +19,9 @@ import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
 class FlowConfig {
 
 	@Bean
-	FlowService flowService(FlowRepository repository, GraphValidator graphValidator) {
-		return new FlowService(repository, graphValidator);
+	FlowService flowService(FlowRepository repository, GraphValidator graphValidator, ValidatorRegistry registry,
+			com.prevention.fraud.validationflow.application.provider.ProviderConfigService providers) {
+		return new FlowService(repository, graphValidator, registry, providers);
 	}
 
 	@Bean
