@@ -28,6 +28,9 @@ public interface ExecutionRepository {
 
 	long count(String tenantId);
 
+	/** Metrics only: WAITING executions of ALL tenants. */
+	long countWaiting();
+
 	void audit(String tenantId, UUID executionId, String eventType, String nodeId, Map<String, Object> details);
 
 	/** Recovery only: RUNNING executions of ALL tenants that started before the cutoff. */

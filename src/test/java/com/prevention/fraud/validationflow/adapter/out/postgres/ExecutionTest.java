@@ -309,6 +309,7 @@ class ExecutionTest {
 				"ok", Map.of("type", "END", "config", Map.of("tag", "ok")),
 				"no", Map.of("type", "END", "config", Map.of("tag", "no"))));
 		activate("k-resume", "CRESUME", g, List.of());
+		double resumedBefore = meters.counter("validation.execution.resumed").count();
 		var approved = executions.execute("t", null, "PF", "CRESUME", Map.of(), null);
 		assertThrows(FlowException.class, () -> executions.resume("other", approved.id(), "APPROVED", null, null, "x"));
 		var done = executions.resume("t", approved.id(), "APPROVED", "fine", Map.of("ticket", "T-1"), "alice");
@@ -351,6 +352,7 @@ class ExecutionTest {
 		}
 		pool.shutdown();
 		assertEquals(1, wins);
+		assertEquals(resumedBefore + 3, meters.counter("validation.execution.resumed").count()); // losers and 409s do not count
 	}
 
 	@Test
@@ -364,7 +366,9 @@ class ExecutionTest {
 		activate("k-cancel", "CCANCEL", g, List.of());
 		var w = executions.execute("t", null, "PF", "CCANCEL", Map.of(), null);
 		assertThrows(FlowException.class, () -> executions.cancel("other", w.id(), null, "x"));
+		double cancelledBefore = meters.counter("validation.execution.cancelled").count();
 		var c = executions.cancel("t", w.id(), "no longer needed", "alice");
+		assertEquals(cancelledBefore + 1, meters.counter("validation.execution.cancelled").count());
 		assertEquals(ExecutionStatus.CANCELLED, c.status());
 		assertTrue(c.completedAt() != null);
 		assertEquals("no longer needed", c.errorInfo().get("reason"));
@@ -827,12 +831,18 @@ class ExecutionTest {
 
 					public long count(String t) { return exRepo.count(t); }
 
+					public long countWaiting() { return exRepo.countWaiting(); }
+
 					public void audit(String t, java.util.UUID id, String ev, String n, Map<String, Object> d) { exRepo.audit(t, id, ev, n, d); }
 
 					public java.util.List<FlowExecution> findRunningStartedBefore(java.time.Instant c) { return exRepo.findRunningStartedBefore(c); }
-				}, clock);
+				}, clock, new MicrometerExecutionMetrics(meters));
 
+		double expiredBefore = meters.counter("validation.execution.wait_expired").count();
 		assertEquals(1, svc.expire());
+		assertEquals(expiredBefore + 1, meters.counter("validation.execution.wait_expired").count());
+		assertEquals(jdbc.queryForObject("SELECT count(*) FROM flow_execution WHERE status = 'WAITING'", Long.class).doubleValue(),
+				meters.get("validation.execution.waiting").gauge().value());
 
 		var got = executions.get("t", expired.id());
 		assertEquals(ExecutionStatus.TIMED_OUT, got.status());

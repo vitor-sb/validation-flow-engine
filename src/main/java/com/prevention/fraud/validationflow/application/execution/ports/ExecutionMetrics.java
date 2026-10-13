@@ -15,4 +15,13 @@ public interface ExecutionMetrics {
 
 	void nodeFinished(String type, String status, java.time.Duration duration);
 
+	void resumed();
+
+	void cancelled();
+
+	void waitExpired();
+
+	/** Registers the gauge of executions currently WAITING, read lazily from the given supplier. */
+	void waitingGauge(java.util.function.LongSupplier waiting);
+
 }

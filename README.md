@@ -23,6 +23,10 @@ Isolamento por **tenant**: a API key fixa o `tenantId`, e dois tenants podem ter
 
 O header opcional `Idempotency-Key` (escopo do tenant) evita executar a mesma validação duas vezes num retry: a repetição com o mesmo payload devolve a execução original (`Idempotent-Replayed: true`), payload diferente dá 409 e chamadas concorrentes rodam o fluxo uma vez. Se a chamada lançar exceção antes de criar a execução, a chave é liberada; uma execução que termina em falha é um resultado e é reaproveitada. A chave é lembrada pela janela `app.retention.idempotency`.
 
+### Nodes e pausa
+
+Além de START, END, VALIDATION, CONDITION e SUB_FLOW, o node `HUMAN_APPROVAL` (`reason`, `assignedGroup`, `deadline` ISO-8601 limitado por `app.limits.max-wait`) para a execução em `WAITING` (`POST /executions` responde 202). Exige transições com `label` `APPROVED` e `REJECTED`. `resume` segue a transição da decisão sobre o snapshot original; `cancel` só vale para `WAITING`. O job `app.wait.expiry-interval` (padrão PT1M) leva `WAITING` vencida a `TIMED_OUT` (`WAIT_EXPIRED`). Métricas: gauge `validation.execution.waiting` e contadores `validation.execution.resumed|cancelled|wait_expired`.
+
 ### Validadores e provedores externos
 
 Validadores são beans `ValidatorStrategy` descobertos pelo registry (`GET /api/v1/node-types`). Para adicionar um, implemente a interface e registre o bean, sem tocar no executor.
@@ -74,6 +78,9 @@ Autenticação: header `X-API-Key` com a chave do `.env`. A chave fixa o tenant 
 | `flow:activate` | ativar e arquivar |
 | `validation:execute` | iniciar execução |
 | `validation:read` | consultar execuções e histórico |
+| `validation:resume` | retomar execução em espera (`POST /executions/{id}/resume`) |
+| `validation:cancel` | cancelar execução em espera (`POST /executions/{id}/cancel`) |
+| `provider:read` / `provider:admin` | listar / alterar a configuração de provedores (`/api/v1/providers`) |
 
 Exemplo:
 
@@ -100,7 +107,7 @@ Propriedades `app.*` (valores padrão no código): `limits.*` (nós, transiçõe
 
 ## O que ainda não existe
 
-Ficou fora do MVP por decisão: `fork/join`, execução assíncrona (callback e polling), retomada e cancelamento, dead-letter, `HUMAN_APPROVAL`, cache de respostas de provedores, particionamento e réplicas de leitura. Detalhes em [`tasks/coverage.md`](tasks/coverage.md).
+Ficou fora do MVP por decisão: `fork/join`, execução assíncrona (callback e polling), dead-letter, cache de respostas de provedores, particionamento e réplicas de leitura. Detalhes em [`tasks/coverage.md`](tasks/coverage.md).
 
 ## Desenvolvimento com Ralph
 

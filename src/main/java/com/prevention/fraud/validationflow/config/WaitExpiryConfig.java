@@ -15,8 +15,8 @@ class WaitExpiryConfig {
 
 	private final WaitExpiryService service;
 
-	WaitExpiryConfig(ExecutionRepository repository) {
-		this.service = new WaitExpiryService(repository, Clock.systemUTC());
+	WaitExpiryConfig(ExecutionRepository repository, io.micrometer.core.instrument.MeterRegistry meters) {
+		this.service = new WaitExpiryService(repository, Clock.systemUTC(), new MicrometerExecutionMetrics(meters));
 	}
 
 	@Scheduled(fixedDelayString = "${app.wait.expiry-interval:PT1M}")

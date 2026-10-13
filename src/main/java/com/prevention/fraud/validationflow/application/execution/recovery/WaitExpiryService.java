@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.prevention.fraud.validationflow.application.execution.ports.ExecutionMetrics;
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
 
@@ -14,7 +15,10 @@ public class WaitExpiryService {
 
 	private final Clock clock;
 
-	public WaitExpiryService(ExecutionRepository repository, Clock clock) {
+	private final ExecutionMetrics metrics;
+
+	public WaitExpiryService(ExecutionRepository repository, Clock clock, ExecutionMetrics metrics) {
+		this.metrics = metrics;
 		this.repository = repository;
 		this.clock = clock;
 	}
@@ -31,6 +35,7 @@ public class WaitExpiryService {
 			if (repository.update(ex.timeOut(error))) {
 				repository.audit(ex.tenantId(), ex.id(), "EXECUTION_WAIT_EXPIRED", ex.waitingNodeId(),
 						Map.of("deadline", ex.waitDeadline().toString()));
+				metrics.waitExpired();
 				expired++;
 			}
 		}

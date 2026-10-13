@@ -57,6 +57,7 @@ public class ExecutionService {
 		this.repository = repository;
 		this.recorder = new ExecutionRecorder(repository, metrics);
 		handlers.forEach(h -> this.handlers.put(h.type(), h));
+		metrics.waitingGauge(repository::countWaiting);
 	}
 
 	/** Synchronous: resolves the active flow, validates the input contract, walks the snapshot graph, returns the final state. */
@@ -165,6 +166,7 @@ public class ExecutionService {
 		catch (IllegalStateException e) {
 			throw FlowException.conflict("execution was modified concurrently");
 		}
+		recorder.metrics().resumed();
 		Map<String, Object> ctx = new HashMap<>(ex.contextData());
 		Map<String, Object> outputs = new LinkedHashMap<>(Maps.of(ctx.get("nodes")));
 		ctx.put("nodes", outputs);
@@ -214,6 +216,7 @@ public class ExecutionService {
 		catch (IllegalStateException e) {
 			throw FlowException.conflict("execution was modified concurrently");
 		}
+		recorder.metrics().cancelled();
 		Map<String, Object> details = new LinkedHashMap<>();
 		details.put("cancelledBy", actor);
 		if (reason != null) {

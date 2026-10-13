@@ -75,6 +75,10 @@ public class ExecutionRecorder {
 		metrics.executionFinished(status, duration);
 	}
 
+	public ExecutionMetrics metrics() {
+		return metrics;
+	}
+
 	public void finished(FlowExecution done) {
 		MDC.put("status", done.status().name());
 		log.info("execution finished");

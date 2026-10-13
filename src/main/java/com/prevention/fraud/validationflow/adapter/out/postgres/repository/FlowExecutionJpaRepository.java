@@ -29,6 +29,8 @@ public interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionE
 
 	List<FlowExecutionEntity> findByStatusAndStartedAtBefore(ExecutionStatus status, Instant cutoff);
 
+	long countByStatus(ExecutionStatus status);
+
 	List<FlowExecutionEntity> findByStatusAndWaitDeadlineBefore(ExecutionStatus status, Instant cutoff);
 
 	/** Optimistic lock by hand: matches only the stored lock_version, and bumps it. */

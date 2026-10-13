@@ -94,6 +94,11 @@ public class JpaExecutionRepository implements ExecutionRepository {
 	}
 
 	@Override
+	public long countWaiting() {
+		return executions.countByStatus(ExecutionStatus.WAITING);
+	}
+
+	@Override
 	public List<FlowExecution> findWaitingExpiredBefore(Instant now) {
 		return executions.findByStatusAndWaitDeadlineBefore(ExecutionStatus.WAITING, now).stream()
 				.map(ExecutionMapper::toDomain).toList();

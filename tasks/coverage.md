@@ -10,6 +10,11 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 - `/actuator/metrics` exposto e protegido pela autenticação existente (`management.endpoints.web.exposure.include`).
 - Testes: `ExecutionTest.executionCounterAndTimersTrackCompletedAndFailed` e `ExecutionHttpTest.metricsAreExposedBehindAuthentication`.
 
+### RF-08 (HUMAN_APPROVAL) e RF-12 (retomar/cancelar): OK
+- Node `HUMAN_APPROVAL` pausa em `WAITING`; `POST /executions/{id}/resume` e `/cancel`; job de expiração (`WAIT_EXPIRED`).
+- Métricas: gauge `validation.execution.waiting`, contadores `validation.execution.resumed|cancelled|wait_expired`.
+- Testes: `ExecutionTest` (resume, cancel, expiração, métricas).
+
 ## Critérios do v0.1 (seção 15)
 
 | # | Critério | Status |
@@ -26,8 +31,8 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 
 ## Adiado por decisão (fases 3 a 5 do v0.1)
 
-fork/join, ASYNC_VALIDATION, EXTERNAL_CALL, callbacks/polling, retomada (`/resume`), dead-letter,
-HUMAN_APPROVAL, cache de provedores, particionamento, broker, réplicas de leitura, projeções,
+fork/join, ASYNC_VALIDATION, EXTERNAL_CALL, callbacks/polling, dead-letter,
+cache de provedores, particionamento, broker, réplicas de leitura, projeções,
 aprovação em dois níveis para ativação.
 
 ## Persistência: decisões da migração JDBC → JPA

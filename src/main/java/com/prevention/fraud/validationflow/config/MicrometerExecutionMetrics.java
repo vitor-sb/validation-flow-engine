@@ -40,6 +40,26 @@ public class MicrometerExecutionMetrics implements ExecutionMetrics {
 		timer("validation.node.duration", "type", type, "status", status).record(duration);
 	}
 
+	@Override
+	public void resumed() {
+		meters.counter("validation.execution.resumed").increment();
+	}
+
+	@Override
+	public void cancelled() {
+		meters.counter("validation.execution.cancelled").increment();
+	}
+
+	@Override
+	public void waitExpired() {
+		meters.counter("validation.execution.wait_expired").increment();
+	}
+
+	@Override
+	public void waitingGauge(java.util.function.LongSupplier waiting) {
+		io.micrometer.core.instrument.Gauge.builder("validation.execution.waiting", waiting::getAsLong).register(meters);
+	}
+
 	private Timer timer(String name, String... tags) {
 		return Timer.builder(name).tags(tags).publishPercentiles(0.5, 0.95, 0.99).register(meters);
 	}
