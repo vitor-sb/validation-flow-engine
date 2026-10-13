@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * The committed openapi.yaml must equal the spec generated from the code, and must be a valid OpenAPI document.
  * Regenerate with: mvn test -Dtest=OpenApiContractTest -Dopenapi.write=true
  */
-@SpringBootTest(properties = { "app.security.api-keys[0].key=k", "app.security.api-keys[0].tenant-id=t",
+@SpringBootTest(properties = { "springdoc.api-docs.enabled=true", "app.security.api-keys[0].key=k", "app.security.api-keys[0].tenant-id=t",
 		"app.security.api-keys[0].scopes=flow:read" })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)

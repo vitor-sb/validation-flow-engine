@@ -76,6 +76,9 @@ class ValidatorRegistryTest {
 	@MockitoBean
 	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
 
+	@MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository providerConfigRepository;
+
 	@Test
 	void discoversNewValidatorAndExecutesItViaRegistry() {
 		var result = registry.find("fake").orElseThrow()

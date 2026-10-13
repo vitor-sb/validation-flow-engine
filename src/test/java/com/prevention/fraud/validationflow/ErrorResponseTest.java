@@ -44,6 +44,9 @@ class ErrorResponseTest {
 	@MockitoBean
 	com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository idempotencyRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository providerConfigRepository;
+
 	private static void assertErrorResponse(ResultActions r, int status, String code) throws Exception {
 		r.andExpect(status().is(status)).andExpect(jsonPath("$.code").value(code))
 				.andExpect(jsonPath("$.retryable").isBoolean()).andExpect(jsonPath("$.details").isArray())
