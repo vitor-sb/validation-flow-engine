@@ -785,6 +785,66 @@ class ExecutionTest {
 		assertEquals(null, got.completedAt());
 	}
 
+	@Test
+	void waitExpiryTimesOutOnlyExpiredWaitingAndLosesToResume() {
+		var flow = flows.get("t", activate("exp-k", "CEXP", graph(true, "x"), List.of()));
+		var base = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+		var expired = running("t", flow, base);
+		var future = running("t", flow, base);
+		var raced = running("t", flow, base);
+		var stillRunning = running("t", flow, base);
+		assertTrue(exRepo.update(expired.waitAt("n1", base.plusSeconds(10), "r", Map.of())));
+		assertTrue(exRepo.update(future.waitAt("n1", base.plusSeconds(1000), "r", Map.of())));
+		var racedWaiting = raced.waitAt("n1", base.plusSeconds(10), "r", Map.of());
+		assertTrue(exRepo.update(racedWaiting));
+		var clock = java.time.Clock.fixed(base.plusSeconds(60), java.time.ZoneOffset.UTC);
+		// a resume wins the race after the expiry job has read the row
+		var svc = new com.prevention.fraud.validationflow.application.execution.recovery.WaitExpiryService(
+				new com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository() {
+					public java.util.List<FlowExecution> findWaitingExpiredBefore(java.time.Instant now) {
+						var read = exRepo.findWaitingExpiredBefore(now);
+						jdbc.update("UPDATE flow_execution SET status = 'RUNNING', lock_version = lock_version + 1 WHERE id = ?",
+								raced.id());
+						return read;
+					}
+
+					public void insert(FlowExecution e) { exRepo.insert(e); }
+
+					public boolean update(FlowExecution e) { return exRepo.update(e); }
+
+					public java.util.Optional<FlowExecution> findById(String t, java.util.UUID id) { return exRepo.findById(t, id); }
+
+					public void recordNode(String t, java.util.UUID id, String n, String ty, int a, String st, Map<String, Object> o,
+							Map<String, Object> er, Map<String, Object> in, java.time.Instant at) {
+						exRepo.recordNode(t, id, n, ty, a, st, o, er, in, at);
+					}
+
+					public java.util.List<com.prevention.fraud.validationflow.domain.execution.NodeExecution> findNodes(String t, java.util.UUID id) {
+						return exRepo.findNodes(t, id);
+					}
+
+					public java.util.List<FlowExecution> list(String t, int l, long o) { return exRepo.list(t, l, o); }
+
+					public long count(String t) { return exRepo.count(t); }
+
+					public void audit(String t, java.util.UUID id, String ev, String n, Map<String, Object> d) { exRepo.audit(t, id, ev, n, d); }
+
+					public java.util.List<FlowExecution> findRunningStartedBefore(java.time.Instant c) { return exRepo.findRunningStartedBefore(c); }
+				}, clock);
+
+		assertEquals(1, svc.expire());
+
+		var got = executions.get("t", expired.id());
+		assertEquals(ExecutionStatus.TIMED_OUT, got.status());
+		assertEquals("WAIT_EXPIRED", got.errorInfo().get("code"));
+		assertTrue(got.completedAt() != null);
+		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM execution_audit_log WHERE execution_id = ? AND event_type = 'EXECUTION_WAIT_EXPIRED'",
+				Integer.class, expired.id()));
+		assertEquals(ExecutionStatus.WAITING, executions.get("t", future.id()).status());
+		assertEquals(ExecutionStatus.RUNNING, executions.get("t", raced.id()).status());
+		assertEquals(ExecutionStatus.RUNNING, executions.get("t", stillRunning.id()).status());
+	}
+
 	static FlowExecution running(String tenant, com.prevention.fraud.validationflow.domain.flow.FlowDefinition flow,
 			java.time.Instant startedAt) {
 		var p = FlowExecution.pending(tenant, flow, null, Map.of());

@@ -15,7 +15,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.prevention.fraud.validationflow.domain.execution.ExecutionStatus;
 
-/** Every query is scoped by tenantId, except {@link #findByStatusAndStartedAtBefore} (recovery). */
+/** Every query is scoped by tenantId, except {@link #findByStatusAndStartedAtBefore} and {@link #findByStatusAndWaitDeadlineBefore} (background jobs). */
 public interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionEntity, UUID> {
 
 	Optional<FlowExecutionEntity> findByTenantIdAndId(String tenantId, UUID id);
@@ -28,6 +28,8 @@ public interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionE
 			@Param("offset") long offset);
 
 	List<FlowExecutionEntity> findByStatusAndStartedAtBefore(ExecutionStatus status, Instant cutoff);
+
+	List<FlowExecutionEntity> findByStatusAndWaitDeadlineBefore(ExecutionStatus status, Instant cutoff);
 
 	/** Optimistic lock by hand: matches only the stored lock_version, and bumps it. */
 	@Modifying(clearAutomatically = true, flushAutomatically = true)

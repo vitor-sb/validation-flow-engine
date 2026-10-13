@@ -93,4 +93,10 @@ public class JpaExecutionRepository implements ExecutionRepository {
 				.map(ExecutionMapper::toDomain).toList();
 	}
 
+	@Override
+	public List<FlowExecution> findWaitingExpiredBefore(Instant now) {
+		return executions.findByStatusAndWaitDeadlineBefore(ExecutionStatus.WAITING, now).stream()
+				.map(ExecutionMapper::toDomain).toList();
+	}
+
 }

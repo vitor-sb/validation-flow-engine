@@ -33,4 +33,7 @@ public interface ExecutionRepository {
 	/** Recovery only: RUNNING executions of ALL tenants that started before the cutoff. */
 	java.util.List<FlowExecution> findRunningStartedBefore(java.time.Instant cutoff);
 
+	/** Expiry job only: WAITING executions of ALL tenants whose wait_deadline is before the given instant. */
+	java.util.List<FlowExecution> findWaitingExpiredBefore(java.time.Instant now);
+
 }
