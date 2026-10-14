@@ -667,6 +667,32 @@ class ExecutionTest {
 	}
 
 	@Test
+	void resumingChildContinuesParentAndParentIdIsRejected() {
+		Map<String, Object> approval = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),
+				"h", Map.of("type", "HUMAN_APPROVAL", "config", Map.of("reason", "review", "deadline", "PT1H"),
+						"transitions", List.of(Map.of("to", "ok", "label", "APPROVED"), Map.of("to", "no", "label", "REJECTED"))),
+				"ok", Map.of("type", "END", "config", Map.of("tag", "ok")),
+				"no", Map.of("type", "END", "config", Map.of("tag", "no"))));
+		activate("r-c", "RC", approval, List.of());
+		activate("r-b", "RB", subGraph("r-c", Map.of("outputMapping", Map.of("tag", "$.nodes.ok.tag"))), List.of());
+		activate("r-a", "RA", subGraph("r-b", Map.of()), List.of());
+		for (String decision : List.of("APPROVED", "REJECTED")) {
+			FlowExecution a = executions.execute("t", "r-a", null, null, Map.of(), null);
+			String childId = jdbc.queryForObject("SELECT id::text FROM flow_execution WHERE flow_key = 'r-c' AND status = 'WAITING'",
+					String.class);
+			var e = assertThrows(FlowException.class, () -> executions.resume("t", a.id(), "APPROVED", null, null, "x"));
+			assertTrue(e.getMessage().contains("waiting on sub-flow execution"));
+			var c = executions.resume("t", java.util.UUID.fromString(childId), decision, null, null, "alice");
+			assertEquals(ExecutionStatus.COMPLETED, c.status());
+			assertEquals("APPROVED".equals(decision) ? "ok" : "no", ((Map<?, ?>) c.result().get("config")).get("tag"));
+			assertEquals(ExecutionStatus.COMPLETED, executions.get("t", a.id()).status());
+			assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM flow_execution WHERE status = 'WAITING' AND flow_key LIKE 'r-%'", Integer.class));
+			assertThrows(FlowException.class, () -> executions.resume("t", java.util.UUID.fromString(childId), decision, null, null, "alice"));
+		}
+	}
+
+	@Test
 	void pausedChildLeavesParentAndGrandparentWaiting() {
 		Map<String, Object> approval = Map.of("startNodeId", "s", "nodes", Map.of(
 				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),

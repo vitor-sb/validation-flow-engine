@@ -126,23 +126,26 @@ public class ExecutionService {
 			if (done != null) {
 				return done;
 			}
-			String next = null;
-			for (Map<String, Object> t : Maps.list(node.get("transitions"))) {
-				Map<String, Object> cond = t.get("condition") == null ? null : Maps.of(t.get("condition"));
-				// a transition without condition is the default branch
-				var ev = cond == null ? null : ConditionEvaluator.evaluate(cond, ctx);
-				recorder.auditTransition(ex, id, t.get("to"), ev == null || ev.result(),
-						ev == null ? null : LogMasker.maskObserved(cond, ev.observed()));
-				if (ev == null || ev.result()) {
-					next = (String) t.get("to");
-					break;
-				}
-			}
+			String next = nextNode(ex, id, node, ctx);
 			if (next == null) {
 				return save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition matched at node " + id));
 			}
 			id = next;
 		}
+	}
+
+	/** First transition of the node whose condition holds (no condition = default branch); null if none matches. */
+	private String nextNode(FlowExecution ex, String id, Map<String, Object> node, Map<String, Object> ctx) {
+		for (Map<String, Object> t : Maps.list(node.get("transitions"))) {
+			Map<String, Object> cond = t.get("condition") == null ? null : Maps.of(t.get("condition"));
+			var ev = cond == null ? null : ConditionEvaluator.evaluate(cond, ctx);
+			recorder.auditTransition(ex, id, t.get("to"), ev == null || ev.result(),
+					ev == null ? null : LogMasker.maskObserved(cond, ev.observed()));
+			if (ev == null || ev.result()) {
+				return (String) t.get("to");
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -157,6 +160,10 @@ public class ExecutionService {
 		}
 		String nodeId = waiting.waitingNodeId();
 		Map<String, Object> node = Maps.of(Maps.of(waiting.snapshot().get("nodes")).get(nodeId));
+		if ("SUB_FLOW".equals(node.get("type"))) {
+			throw FlowException.conflict("execution is waiting on sub-flow execution " + pendingChild(waiting)
+					+ "; resume that one instead");
+		}
 		String next = Maps.list(node.get("transitions")).stream().filter(t -> decision.equals(t.get("label")))
 				.map(t -> (String) t.get("to")).findFirst().orElse(null);
 		FlowExecution ex;
@@ -184,11 +191,11 @@ public class ExecutionService {
 			outputs.put(nodeId, decided);
 			recorder.recordNode(ex, nodeId, (String) node.get("type"), 2, "COMPLETED", decided, null, ctx, Instant.now());
 			repository.audit(tenantId, id, "EXECUTION_RESUMED", nodeId, decided);
-			if (next == null) {
-				return save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition for decision at node " + nodeId));
-			}
-			FlowExecution done = walk(ex, ctx, outputs, List.of(ex.flowKey()), next);
+			FlowExecution done = next == null
+					? save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition for decision at node " + nodeId))
+					: walk(ex, ctx, outputs, List.of(ex.flowKey()), next);
 			recorder.finished(done);
+			continueParent(done, ctx);
 			return done;
 		}
 		catch (RuntimeException e) {
@@ -198,6 +205,78 @@ public class ExecutionService {
 		finally {
 			recorder.restoreMdc(outerMdc);
 		}
+	}
+
+	private String pendingChild(FlowExecution parent) {
+		return repository.findNodes(parent.tenantId(), parent.id()).stream()
+				.filter(n -> n.nodeId().equals(parent.waitingNodeId()) && "PENDING".equals(n.status()))
+				.map(n -> String.valueOf(n.outputData().get("childExecutionId"))).findFirst().orElse("?");
+	}
+
+	/**
+	 * After a child that was paused in a SUB_FLOW node ends, continues the parent from that node: output mapping and
+	 * normal transitions on COMPLETED, SUB_FLOW_FAILED on any other final state, untouched while the child waits again.
+	 * Recurses up the chain; a lost optimistic lock on the parent means another resume owns it (409).
+	 */
+	private void continueParent(FlowExecution child, Map<String, Object> childCtx) {
+		if (child.parentExecutionId() == null || child.status() == ExecutionStatus.WAITING) {
+			return;
+		}
+		FlowExecution parent = get(child.tenantId(), child.parentExecutionId());
+		if (parent.status() != ExecutionStatus.WAITING || !child.parentNodeId().equals(parent.waitingNodeId())) {
+			return;
+		}
+		String nodeId = parent.waitingNodeId();
+		Map<String, Object> node = Maps.of(Maps.of(parent.snapshot().get("nodes")).get(nodeId));
+		FlowExecution ex;
+		try {
+			ex = save(parent.resume());
+		}
+		catch (IllegalStateException e) {
+			throw FlowException.conflict("execution was modified concurrently");
+		}
+		recorder.metrics().resumed();
+		Map<String, Object> ctx = new HashMap<>(ex.contextData());
+		Map<String, Object> outputs = new LinkedHashMap<>(Maps.of(ctx.get("nodes")));
+		ctx.put("nodes", outputs);
+		var outerMdc = recorder.enterMdc(ex, ex.correlationId());
+		FlowExecution done;
+		try {
+			Instant started = Instant.now();
+			if (child.status() == ExecutionStatus.COMPLETED) {
+				Map<String, Object> out = new LinkedHashMap<>();
+				NodeConfig.from(Maps.of(node.get("config"))).outputMapping().forEach((name, path) -> {
+					Object v = ConditionEvaluator.lookup(childCtx, path.startsWith("$.") ? path.substring(2) : path.substring(1));
+					if (v != null) {
+						out.put(name, v);
+					}
+				});
+				out.put("success", true);
+				out.put("childExecutionId", child.id().toString());
+				outputs.put(nodeId, out);
+				recorder.recordNode(ex, nodeId, "SUB_FLOW", 2, "COMPLETED", out, null, ctx, started);
+				String next = nextNode(ex, nodeId, node, ctx);
+				done = next == null ? save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition matched at node " + nodeId))
+						: walk(ex, ctx, outputs, List.of(ex.flowKey()), next);
+			}
+			else {
+				String message = "sub-flow " + child.flowKey() + " ended " + child.status();
+				Map<String, Object> details = new LinkedHashMap<>(Map.of("nodeId", nodeId, "childExecutionId",
+						child.id().toString(), "childError", child.errorInfo() == null ? Map.of() : child.errorInfo()));
+				recorder.recordNode(ex, nodeId, "SUB_FLOW", 2, "FAILED", Map.of(),
+						error("SUB_FLOW_FAILED", message, false), ctx, started);
+				done = save(ex.fail(ctx, "SUB_FLOW_FAILED", message, false, details));
+			}
+			recorder.finished(done);
+		}
+		catch (RuntimeException e) {
+			recorder.failed(e, ctx);
+			done = save(ex.fail(ctx, "EXECUTION_ERROR", UNEXPECTED, false, Map.of("exception", e.getClass().getName())));
+		}
+		finally {
+			recorder.restoreMdc(outerMdc);
+		}
+		continueParent(done, ctx);
 	}
 
 	/** Cancels a WAITING execution of the tenant. RUNNING and final states are 409 (no cooperative cancellation). */
