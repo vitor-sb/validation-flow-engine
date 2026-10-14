@@ -82,6 +82,11 @@ public class ProviderCallbackService {
 		catch (ProviderException | UnsupportedOperationException e) {
 			throw FlowException.invalidInput("callback body could not be processed");
 		}
+		return complete(call, data);
+	}
+
+	/** Resumes the waiting execution with an already normalized result and marks the call COMPLETED; 409 (call FAILED) if it can no longer resume. */
+	public Outcome complete(ProviderCall call, Map<String, Object> data) {
 		var node = Maps.of(Maps.of(executions.get(call.tenantId(), call.executionId()).snapshot().get("nodes")).get(call.nodeId()));
 		boolean success = ProviderBackedValidator.matches(Maps.of(node.get("config")).get("expect"), data);
 		try {
@@ -89,7 +94,7 @@ public class ProviderCallbackService {
 		}
 		catch (FlowException e) {
 			// lost a race with a duplicate callback, or the execution expired/was cancelled before the answer arrived
-			var now = calls.findById(callId).orElse(call);
+			var now = calls.findById(call.id()).orElse(call);
 			if (now.status() == ProviderCall.Status.COMPLETED) {
 				return Outcome.DUPLICATE;
 			}

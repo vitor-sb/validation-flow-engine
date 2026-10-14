@@ -19,6 +19,11 @@ public record ProviderCall(UUID id, String tenantId, UUID executionId, String no
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 
+	public ProviderCall withState(Status status, int attempts, Instant nextPollAt, Instant now) {
+		return new ProviderCall(id, tenantId, executionId, nodeId, providerKey, externalRef, mode, status, attempts,
+				nextPollAt, deadline, callbackTokenHash, createdAt, now);
+	}
+
 	/** A new random token; the caller hands it to the provider and must not persist it. */
 	public static String newToken() {
 		var b = new byte[32];
