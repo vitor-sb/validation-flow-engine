@@ -667,6 +667,36 @@ class ExecutionTest {
 	}
 
 	@Test
+	void pausedChildLeavesParentAndGrandparentWaiting() {
+		Map<String, Object> approval = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),
+				"h", Map.of("type", "HUMAN_APPROVAL", "config", Map.of("reason", "review", "deadline", "PT1H"),
+						"transitions", List.of(Map.of("to", "e", "label", "APPROVED"), Map.of("to", "e", "label", "REJECTED"))),
+				"e", Map.of("type", "END", "config", Map.of())));
+		activate("w-c", "WC", approval, List.of());
+		activate("w-b", "WB", subGraph("w-c", Map.of()), List.of());
+		activate("w-a", "WA", subGraph("w-b", Map.of()), List.of());
+		FlowExecution a = executions.execute("t", "w-a", null, null, Map.of(), null);
+		assertEquals(ExecutionStatus.WAITING, a.status());
+		assertEquals("sub", a.waitingNodeId());
+		assertEquals("SUB_FLOW_WAITING", a.waitReason());
+		var rows = jdbc.queryForList("SELECT id, flow_key, status, waiting_node_id, wait_deadline, parent_node_id "
+				+ "FROM flow_execution WHERE flow_key IN ('w-b', 'w-c') ORDER BY flow_key");
+		assertEquals(2, rows.size());
+		rows.forEach(r -> assertEquals("WAITING", r.get("status")));
+		assertEquals("sub", rows.get(0).get("parent_node_id"));
+		assertEquals("sub", rows.get(0).get("waiting_node_id"));
+		assertEquals("h", rows.get(1).get("waiting_node_id"));
+		assertEquals(rows.get(1).get("wait_deadline"), rows.get(0).get("wait_deadline"));
+		assertEquals(a.waitDeadline().toEpochMilli() / 1000, jdbc.queryForObject("SELECT extract(epoch FROM wait_deadline)::bigint FROM flow_execution WHERE id = ?", Long.class, a.id()));
+		assertEquals(rows.get(1).get("id").toString(), jdbc.queryForObject(
+				"SELECT output_data->>'childExecutionId' FROM node_execution WHERE execution_id = ? AND node_id = 'sub'",
+				String.class, rows.get(0).get("id")));
+		assertEquals("PENDING", jdbc.queryForObject(
+				"SELECT status FROM node_execution WHERE execution_id = ? AND node_id = 'sub'", String.class, a.id()));
+	}
+
+	@Test
 	void failedChildFailsTheParentAndTenantsDoNotShareChildren() {
 		activate("sf-child2", "SFC2", graph(false, "c"), List.of());
 		activate("sf-parent2", "SFP2", subGraph("sf-child2", Map.of("inputMapping", Map.of("ok", "$.inputData.flag"))), List.of());

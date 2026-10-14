@@ -26,8 +26,9 @@ public class SubFlowRunner {
 
 	}
 
-	/** Either a failure ({@code code} set, with {@code details}) or the mapped {@code output}. */
-	public record Outcome(String code, String message, Map<String, Object> details, Map<String, Object> output) {
+	/** A failure ({@code code} set, with {@code details}), a {@code waitingChild} (paused), or the mapped {@code output}. */
+	public record Outcome(String code, String message, Map<String, Object> details, Map<String, Object> output,
+			FlowExecution waitingChild) {
 	}
 
 	private final FlowService flows;
@@ -78,6 +79,9 @@ public class SubFlowRunner {
 				code = e.kind() == FlowException.Kind.INVALID_INPUT ? "SUB_FLOW_INVALID_INPUT" : "SUB_FLOW_NOT_FOUND";
 				message = String.valueOf(e.getMessage());
 			}
+			if (child != null && child.status() == ExecutionStatus.WAITING) {
+				return new Outcome(null, null, details, null, child);
+			}
 			if (child != null && child.status() != ExecutionStatus.COMPLETED) {
 				code = "SUB_FLOW_FAILED"; // onFailure is always FAIL_PARENT
 				message = "sub-flow " + childKey + " ended " + child.status();
@@ -86,7 +90,7 @@ public class SubFlowRunner {
 			}
 		}
 		if (code != null) {
-			return new Outcome(code, message, details, null);
+			return new Outcome(code, message, details, null, null);
 		}
 		Map<String, Object> out = new LinkedHashMap<>();
 		config.outputMapping().forEach((name, path) -> {
@@ -97,7 +101,7 @@ public class SubFlowRunner {
 		});
 		out.put("success", true);
 		out.put("childExecutionId", child.id().toString());
-		return new Outcome(null, null, details, out);
+		return new Outcome(null, null, details, out, null);
 	}
 
 	/** Only plain dotted JSONPath ({@code $.a.b}) is supported; {@code $} alone is the whole context. */

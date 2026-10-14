@@ -96,6 +96,10 @@ public final class NodeHandlers {
 						ExecutionService.error(r.code(), r.message(), false), s.ctx(), started);
 				return s.host().save(s.ex().fail(s.ctx(), r.code(), r.message(), false, r.details()));
 			}
+			if (r.waitingChild() != null) {
+				var child = r.waitingChild();
+				return s.pause("SUB_FLOW_WAITING", child.waitDeadline(), Map.of("childExecutionId", child.id().toString()));
+			}
 			s.outputs().put(s.nodeId(), r.output());
 			complete(s, r.output(), started);
 			return null;
