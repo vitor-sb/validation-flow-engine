@@ -32,7 +32,7 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 
 ## Adiado por decisão (fases 3 a 5 do v0.1)
 
-fork/join, ASYNC_VALIDATION, EXTERNAL_CALL, callbacks/polling, dead-letter,
+fork/join, ASYNC_VALIDATION,
 cache de provedores, particionamento, broker, réplicas de leitura, projeções,
 aprovação em dois níveis para ativação.
 

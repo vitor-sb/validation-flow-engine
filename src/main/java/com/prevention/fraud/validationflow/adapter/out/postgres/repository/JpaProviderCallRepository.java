@@ -58,6 +58,11 @@ public class JpaProviderCallRepository implements ProviderCallRepository {
 	}
 
 	@Override
+	public long countByStatus(ProviderCall.Status status) {
+		return calls.countByStatus(status.name());
+	}
+
+	@Override
 	public Optional<ProviderCall> find(String tenantId, UUID id) {
 		return calls.findByTenantIdAndId(tenantId, id).map(ProviderCallMapper::toDomain);
 	}

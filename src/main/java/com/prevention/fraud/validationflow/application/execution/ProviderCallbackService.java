@@ -7,6 +7,8 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import javax.crypto.Mac;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javax.crypto.spec.SecretKeySpec;
 
 import com.prevention.fraud.validationflow.application.execution.node.Maps;
@@ -18,10 +20,13 @@ import com.prevention.fraud.validationflow.application.provider.ProviderCallRepo
 import com.prevention.fraud.validationflow.application.provider.ProviderConfig;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
+import com.prevention.fraud.validationflow.application.provider.ProviderMetrics;
 import com.prevention.fraud.validationflow.application.validator.ProviderBackedValidator;
 
 /** Accepts a provider's callback for a pending call and resumes the waiting execution with the normalized result. */
 public class ProviderCallbackService {
+
+	private static final Logger log = LoggerFactory.getLogger(ProviderCallbackService.class);
 
 	public enum Outcome { UNAUTHORIZED, ACCEPTED, DUPLICATE }
 
@@ -34,15 +39,18 @@ public class ProviderCallbackService {
 	private final CredentialResolver credentials;
 	private final ExecutionService executions;
 	private final Clock clock;
+	private final ProviderMetrics metrics;
 
 	public ProviderCallbackService(ProviderCallRepository calls, ProviderConfigService configs,
-			Map<String, DataProvider> providers, CredentialResolver credentials, ExecutionService executions, Clock clock) {
+			Map<String, DataProvider> providers, CredentialResolver credentials, ExecutionService executions, Clock clock,
+			ProviderMetrics metrics) {
 		this.calls = calls;
 		this.configs = configs;
 		this.providers = providers;
 		this.credentials = credentials;
 		this.executions = executions;
 		this.clock = clock;
+		this.metrics = metrics;
 	}
 
 	/**
@@ -58,21 +66,26 @@ public class ProviderCallbackService {
 		}
 		var config = configs.resolve(call.tenantId(), call.providerKey()).orElse(null);
 		if (config != null && config.callbackSecretRef() != null && !signatureValid(config, signature, rawBody)) {
+			metrics.callback(call.providerKey(), "unauthorized");
 			return Outcome.UNAUTHORIZED;
 		}
 		if (call.status() == ProviderCall.Status.COMPLETED) {
+			metrics.callback(call.providerKey(), "duplicate");
 			return Outcome.DUPLICATE;
 		}
 		if (call.status() != ProviderCall.Status.PENDING) {
+			metrics.callback(call.providerKey(), "conflict");
 			throw FlowException.conflict("call is " + call.status());
 		}
 		if (config == null) {
 			throw FlowException.conflict("provider is not enabled for this tenant");
 		}
 		if (!call.deadline().isAfter(clock.instant())) {
+			metrics.callback(call.providerKey(), "conflict");
 			return expire(call);
 		}
 		if (body == null) {
+			metrics.callback(call.providerKey(), "invalid");
 			throw FlowException.invalidInput("callback body is not a JSON object");
 		}
 		Map<String, Object> data;
@@ -80,9 +93,18 @@ public class ProviderCallbackService {
 			data = providers.get(call.providerKey()).normalizeCallback(config, body);
 		}
 		catch (ProviderException | UnsupportedOperationException e) {
+			metrics.callback(call.providerKey(), "invalid");
 			throw FlowException.invalidInput("callback body could not be processed");
 		}
-		return complete(call, data);
+		try {
+			var outcome = complete(call, data);
+			metrics.callback(call.providerKey(), outcome.name().toLowerCase());
+			return outcome;
+		}
+		catch (FlowException e) {
+			metrics.callback(call.providerKey(), "conflict");
+			throw e;
+		}
 	}
 
 	/** Resumes the waiting execution with an already normalized result and marks the call COMPLETED; 409 (call FAILED) if it can no longer resume. */
@@ -101,11 +123,15 @@ public class ProviderCallbackService {
 			return expire(call);
 		}
 		calls.save(withStatus(call, ProviderCall.Status.COMPLETED));
+		log.info("provider call completed executionId={} callId={} providerKey={} status=COMPLETED", call.executionId(), call.id(),
+				call.providerKey());
 		return Outcome.ACCEPTED;
 	}
 
 	private Outcome expire(ProviderCall call) {
 		calls.save(call.withState(ProviderCall.Status.FAILED, call.attempts(), null, clock.instant(), "EXECUTION_ENDED"));
+		log.warn("provider call failed executionId={} callId={} providerKey={} status=FAILED reason=EXECUTION_ENDED", call.executionId(),
+				call.id(), call.providerKey());
 		throw FlowException.conflict("call is no longer waiting");
 	}
 

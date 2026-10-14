@@ -33,4 +33,7 @@ public interface ProviderCallRepository {
 
 	long countByStatus(String tenantId, ProviderCall.Status status);
 
+	/** All tenants; feeds the operational gauges. */
+	long countByStatus(ProviderCall.Status status);
+
 }

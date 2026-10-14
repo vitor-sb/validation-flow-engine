@@ -34,4 +34,6 @@ public interface ProviderCallJpaRepository extends JpaRepository<ProviderCallEnt
 
 	long countByTenantIdAndStatus(String tenantId, String status);
 
+	long countByStatus(String status);
+
 }

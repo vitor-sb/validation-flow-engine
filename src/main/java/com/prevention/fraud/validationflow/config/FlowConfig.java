@@ -14,7 +14,9 @@ import com.prevention.fraud.validationflow.application.execution.node.NodeHandle
 import com.prevention.fraud.validationflow.application.execution.node.SubFlowRunner;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderCall;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
+import com.prevention.fraud.validationflow.application.provider.ProviderMetrics;
 import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
 import com.prevention.fraud.validationflow.application.execution.ProviderCallAdminService;
 import com.prevention.fraud.validationflow.application.execution.ProviderCallbackService;
@@ -48,11 +50,18 @@ class FlowConfig {
 	}
 
 	@Bean
+	ProviderMetrics providerMetrics(io.micrometer.core.instrument.MeterRegistry meters, ProviderCallRepository calls) {
+		var metrics = new MicrometerProviderMetrics(meters);
+		metrics.gauges(() -> calls.countByStatus(ProviderCall.Status.PENDING), () -> calls.countByStatus(ProviderCall.Status.DEAD));
+		return metrics;
+	}
+
+	@Bean
 	ProviderCallbackService providerCallbackService(ProviderCallRepository calls, ProviderConfigService configs,
-			ObjectProvider<DataProvider> providers, CredentialResolver credentials, ExecutionService executions) {
+			ObjectProvider<DataProvider> providers, CredentialResolver credentials, ExecutionService executions, ProviderMetrics metrics) {
 		return new ProviderCallbackService(calls, configs,
 				providers.orderedStream().collect(java.util.stream.Collectors.toMap(DataProvider::key, p -> p)),
-				credentials, executions, java.time.Clock.systemUTC());
+				credentials, executions, java.time.Clock.systemUTC(), metrics);
 	}
 
 	@Bean

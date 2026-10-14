@@ -23,6 +23,7 @@ import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfig;
+import com.prevention.fraud.validationflow.application.provider.ProviderMetrics;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
 import com.prevention.fraud.validationflow.application.provider.ProviderResult;
@@ -106,10 +107,19 @@ class ProviderPollTest {
 
 	private final TestClock clock = new TestClock();
 
+	private final io.micrometer.core.instrument.simple.SimpleMeterRegistry meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+
+	private final ProviderMetrics metrics = new com.prevention.fraud.validationflow.config.MicrometerProviderMetrics(meters);
+
+	private double polls(String outcome) {
+		var c = meters.find("validation.provider.poll").tags("provider", "fake-poll", "outcome", outcome).counter();
+		return c == null ? 0 : c.count();
+	}
+
 	private ProviderPollService poller() {
 		return new ProviderPollService(calls, configs, Map.of("fake-poll", providers.stream()
 				.filter(p -> p.key().equals("fake-poll")).findFirst().orElseThrow()), completion, clock,
-				Duration.ofSeconds(10), Duration.ofSeconds(60), 2);
+				Duration.ofSeconds(10), Duration.ofSeconds(60), 2, metrics);
 	}
 
 	private FlowExecution start(String tenant, String ref, boolean enabled) {
@@ -171,6 +181,12 @@ class ProviderPollTest {
 		assertEquals(3, POLLS.get("slow-1"));
 		assertEquals("COMPLETED", exStatus(w));
 		assertEquals("COMPLETED", callStatus(w));
+		assertTrue(polls("pending") >= 2, "counts include other tests' due rows");
+		assertTrue(polls("done") >= 1);
+		metrics.gauges(() -> calls.countByStatus(com.prevention.fraud.validationflow.application.provider.ProviderCall.Status.PENDING),
+				() -> calls.countByStatus(com.prevention.fraud.validationflow.application.provider.ProviderCall.Status.DEAD));
+		assertTrue(meters.get("validation.provider.pending").gauge().value() >= 0);
+		assertTrue(meters.get("validation.provider.dead").gauge().value() >= 0);
 		clock.now = clock.now.plusSeconds(600);
 		poller.pollDue();
 		assertEquals(3, POLLS.get("slow-1"), "completed calls are not polled again");

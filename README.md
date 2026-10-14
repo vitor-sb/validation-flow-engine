@@ -27,6 +27,15 @@ O header opcional `Idempotency-Key` (escopo do tenant) evita executar a mesma va
 
 Além de START, END, VALIDATION, CONDITION e SUB_FLOW, o node `HUMAN_APPROVAL` (`reason`, `assignedGroup`, `deadline` ISO-8601 limitado por `app.limits.max-wait`) para a execução em `WAITING` (`POST /executions` responde 202). Exige transições com `label` `APPROVED` e `REJECTED`. `resume` segue a transição da decisão sobre o snapshot original; `cancel` só vale para `WAITING`. O job `app.wait.expiry-interval` (padrão PT1M) leva `WAITING` vencida a `TIMED_OUT` (`WAIT_EXPIRED`). Um `SUB_FLOW` cujo filho pausa deixa o pai em `WAITING`: decida no id do filho e o pai continua; cancelar ou expirar um lado cancela/expira o outro. Métricas: gauge `validation.execution.waiting` e contadores `validation.execution.resumed|cancelled|wait_expired`.
 
+### Provedores assíncronos (callback e polling)
+
+O node `EXTERNAL_CALL` (`providerKey`, `query`, `expect`, `maxWait`) chama um provedor sem bloquear: se o provedor responde `Pending`, o motor grava um `provider_call` e a execução fica `WAITING` (`PROVIDER_PENDING`) até `maxWait`. O resultado chega de duas formas:
+
+- **Callback**: `POST /api/v1/provider-callbacks/{callId}`, fora do esquema de API key, autenticado pelo header `X-Callback-Token` (entregue ao provedor em `start`; só o hash fica no banco). Se o `provider_config` tem `callback_secret_ref`, o header `X-Signature` (HMAC-SHA256 hex do corpo) é exigido. Token inválido dá 401 sem revelar se a chamada existe; repetição é idempotente (200); chamada `DEAD`/`FAILED`/expirada dá 409.
+- **Polling**: o job `app.providers.poll-interval` (PT10S) chama `poll` nas chamadas vencidas, com backoff exponencial até `app.providers.poll-max-delay` (PT5M); erro retryable conta em `attempts` até `app.providers.max-attempts` (5).
+
+Chamadas que falham ou cuja execução expirou/foi cancelada viram `DEAD` (com motivo). Operação (escopo `provider:admin`): `GET /api/v1/provider-calls?status=DEAD` e `POST /api/v1/provider-calls/{id}/retry` (só com a execução ainda `WAITING`, senão 409). Métricas: gauges `validation.provider.pending|dead` e contadores `validation.provider.callback|poll` com tags `provider` e `outcome`. Os logs trazem `executionId`, `callId`, `providerKey` e status, nunca o token nem o corpo.
+
 ### Validadores e provedores externos
 
 Validadores são beans `ValidatorStrategy` descobertos pelo registry (`GET /api/v1/node-types`). Para adicionar um, implemente a interface e registre o bean, sem tocar no executor.
@@ -107,7 +116,7 @@ Propriedades `app.*` (valores padrão no código): `limits.*` (nós, transiçõe
 
 ## O que ainda não existe
 
-Ficou fora do MVP por decisão: `fork/join`, execução assíncrona (callback e polling), dead-letter, cache de respostas de provedores, particionamento e réplicas de leitura. Detalhes em [`tasks/coverage.md`](tasks/coverage.md).
+Ficou fora do MVP por decisão: `fork/join`, cache de respostas de provedores, particionamento e réplicas de leitura. Detalhes em [`tasks/coverage.md`](tasks/coverage.md).
 
 ## Desenvolvimento com Ralph
 
