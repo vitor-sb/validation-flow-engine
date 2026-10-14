@@ -26,6 +26,11 @@ public class MicrometerProviderMetrics implements ProviderMetrics {
 	}
 
 	@Override
+	public void cache(String provider, String result) {
+		meters.counter("validation.provider.cache", "provider", provider, "result", result).increment();
+	}
+
+	@Override
 	public void gauges(LongSupplier pending, LongSupplier dead) {
 		Gauge.builder("validation.provider.pending", pending::getAsLong).register(meters);
 		Gauge.builder("validation.provider.dead", dead::getAsLong).register(meters);

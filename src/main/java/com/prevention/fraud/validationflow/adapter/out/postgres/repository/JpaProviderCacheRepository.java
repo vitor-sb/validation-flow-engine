@@ -59,6 +59,12 @@ public class JpaProviderCacheRepository implements ProviderCacheRepository {
 	}
 
 	@Override
+	@Transactional
+	public int deleteEntriesExpiredBefore(java.time.Instant cutoff) {
+		return entries.deleteExpiredBefore(cutoff);
+	}
+
+	@Override
 	public Optional<ProviderCachePolicy> findPolicy(String tenantId, String providerKey, String operation) {
 		return policies.findById(new ProviderCachePolicyEntity.Key(tenantId, providerKey, operation)).map(JpaProviderCacheRepository::toDomain);
 	}

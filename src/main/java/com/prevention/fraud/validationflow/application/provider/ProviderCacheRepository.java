@@ -11,6 +11,9 @@ public interface ProviderCacheRepository {
 	/** Inserts, or replaces the entry with the same (tenant, provider, operation, requestKey). */
 	void saveEntry(ProviderCacheEntry entry);
 
+	/** Cross-tenant retention sweep: deletes entries whose {@code validUntil} is before the cutoff; returns the count. */
+	int deleteEntriesExpiredBefore(java.time.Instant cutoff);
+
 	Optional<ProviderCachePolicy> findPolicy(String tenantId, String providerKey, String operation);
 
 	List<ProviderCachePolicy> findPolicies(String tenantId, String providerKey);

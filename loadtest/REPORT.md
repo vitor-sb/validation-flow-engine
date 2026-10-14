@@ -51,3 +51,14 @@ Same machine, scenario and `loadtest/run.sh`; run 2026-10-13 (two full runs, plu
 That is -0.3% to -2.7% at 8 clients and -5.2% at 32, inside the 10% threshold and the run-to-run noise noted above. No bisect of US-004..US-012 is needed. p95 at 8 clients: 19.6 ms vs 18.6 / 19.4 ms.
 
 One real difference remains: Postgres `blks_hit` per execution is higher on this branch (about 3.3k vs 1.9k at 8 clients, +70%; +29% at 32), with no throughput cost today. Worth a look if the DB ever becomes the bottleneck (candidates: the new `flow_execution` columns/partial index from V5, `provider_config` lookups). Not investigated.
+
+## After async providers + cache (US-012)
+
+Run 2026-10-14, same machine and `loadtest/run.sh`, levels 8 and 32 (level 8 repeated). Only this Claude session was alive (`claude` ~2% CPU), no `mvn` or other loop running, but load average was 3-6 from the preceding build, so the box may not have been fully idle.
+
+| concurrency | req/s | vs idle baseline (`9b331c2`) | p50 ms | p95 ms | p99 ms | errors |
+|---|---|---|---|---|---|---|
+| 8  | 382.3 / 371.2 | -37% / -39% | 20.4 | 27.8 | 32.6 | 0 |
+| 32 | 531.8 | -26% | 53.9 | 91.7 | 109.0 | 0 |
+
+**Drop above 10%, recorded as a finding.** It is reproducible (two level-8 runs agree) and matches the "contaminated" numbers of the US-013 section (367-376 at 8 clients), so it is either a residual-load artefact of this setup or a real cost of the new cache lookups: the scenario's VALIDATION node (`loadtest-fake`) is not provider-backed, so the cache path should not run, but `provider_config`/`ProviderCache` beans and V6-V9 migrations are new. Not bisected; rerun on a truly idle machine per commit before acting.

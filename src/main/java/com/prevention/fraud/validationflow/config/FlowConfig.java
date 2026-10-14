@@ -63,9 +63,9 @@ class FlowConfig {
 	}
 
 	@Bean
-	ProviderCache providerCache(ProviderCacheRepository repository, CachePolicyService policies,
+	ProviderCache providerCache(ProviderCacheRepository repository, CachePolicyService policies, ProviderMetrics metrics,
 			@org.springframework.beans.factory.annotation.Value("${app.providers.negative-cache-ttl:PT5M}") java.time.Duration negativeTtl) {
-		return new ProviderCache(repository, policies, negativeTtl);
+		return new ProviderCache(repository, policies, negativeTtl, metrics);
 	}
 
 	@Bean

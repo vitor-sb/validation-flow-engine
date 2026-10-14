@@ -59,4 +59,35 @@ class ProviderCacheRepositoryTest {
 		assertNotEquals(ProviderCache.requestKey(params), ProviderCache.requestKey(Map.of("document", "other")));
 	}
 
+
+	@Test
+	void purgesOnlyEntriesExpiredBeforeCutoffAndCountsLookups() {
+		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
+		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
+		var seen = new java.util.ArrayList<String>();
+		var metrics = new com.prevention.fraud.validationflow.application.provider.ProviderMetrics() {
+			public void callback(String p, String o) { }
+			public void poll(String p, String o) { }
+			public void cache(String p, String r) { seen.add(p + ":" + r); }
+			public void gauges(java.util.function.LongSupplier a, java.util.function.LongSupplier b) { }
+		};
+		var cache = new ProviderCache(repo, new CachePolicyService(repo, Map.of("LOW_VOLATILITY", Duration.ofDays(1)), Duration.ofDays(7)), Duration.ofMinutes(5), metrics);
+		var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		repo.savePolicy(new ProviderCachePolicy("tenant-purge", "pp", "default", "LOW_VOLATILITY", 60, false, null, null, null), "tester");
+		var old = Map.<String, Object>of("document", "old");
+		var fresh = Map.<String, Object>of("document", "fresh");
+		cache.store("tenant-purge", "pp", "default", old, Map.of("found", true), now.minus(Duration.ofDays(3)));
+		cache.store("tenant-purge", "pp", "default", fresh, Map.of("found", true), now);
+
+		assertEquals("MISS", cache.lookup("tenant-purge", "pp", "default", Map.of("document", "x"), false, now).status());
+		assertEquals("HIT", cache.lookup("tenant-purge", "pp", "default", fresh, false, now).status());
+		assertEquals("EXPIRED", cache.lookup("tenant-purge", "pp", "default", old, false, now).status());
+		assertEquals("BYPASS", cache.lookup("tenant-purge", "pp", "default", old, true, now).status());
+		assertEquals(java.util.List.of("pp:miss", "pp:hit", "pp:expired", "pp:bypass"), seen);
+
+		assertTrue(repo.deleteEntriesExpiredBefore(now.minus(Duration.ofDays(1))) >= 1);
+		assertTrue(cache.find("tenant-purge", "pp", "default", old).isEmpty());
+		assertTrue(cache.find("tenant-purge", "pp", "default", fresh).isPresent());
+	}
+
 }

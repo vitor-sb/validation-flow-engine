@@ -41,8 +41,15 @@ public class ProviderCache {
 	private final ProviderCacheRepository repository;
 	private final CachePolicyService policies;
 	private final Duration negativeTtl;
+	private final ProviderMetrics metrics;
 
 	public ProviderCache(ProviderCacheRepository repository, CachePolicyService policies, Duration negativeTtl) {
+		this(repository, policies, negativeTtl, ProviderMetrics.NONE);
+	}
+
+	public ProviderCache(ProviderCacheRepository repository, CachePolicyService policies, Duration negativeTtl,
+			ProviderMetrics metrics) {
+		this.metrics = metrics;
 		this.repository = repository;
 		this.policies = policies;
 		this.negativeTtl = negativeTtl;
@@ -62,6 +69,7 @@ public class ProviderCache {
 	public Lookup lookup(String tenantId, String providerKey, String operation, Map<String, ?> params, boolean bypass,
 			Instant now) {
 		if (bypass) {
+			metrics.cache(providerKey, "bypass");
 			return new Lookup(BYPASS, null);
 		}
 		if (policies.resolve(tenantId, providerKey, operation).isEmpty()) {
@@ -69,9 +77,12 @@ public class ProviderCache {
 		}
 		var entry = find(tenantId, providerKey, operation, params);
 		if (entry.isEmpty()) {
+			metrics.cache(providerKey, "miss");
 			return new Lookup(MISS, null);
 		}
-		return new Lookup(entry.get().validUntil().isAfter(now) ? HIT : EXPIRED, entry.get());
+		var lookup = new Lookup(entry.get().validUntil().isAfter(now) ? HIT : EXPIRED, entry.get());
+		metrics.cache(providerKey, lookup.status().toLowerCase());
+		return lookup;
 	}
 
 	/**
@@ -82,7 +93,10 @@ public class ProviderCache {
 		if (!policies.resolve(tenantId, providerKey, operation).filter(ProviderCachePolicy::fallbackOnErrorAllowed).isPresent()) {
 			return Optional.empty();
 		}
-		return find(tenantId, providerKey, operation, params).map(e -> new Lookup(STALE_FALLBACK, e));
+		return find(tenantId, providerKey, operation, params).map(e -> {
+			metrics.cache(providerKey, "stale_fallback");
+			return new Lookup(STALE_FALLBACK, e);
+		});
 	}
 
 	/**

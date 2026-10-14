@@ -1,19 +1,10 @@
-bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)
-date: 2026-10-13T20:27:08-03:00
+date: 2026-10-14T00:45:01-03:00
 cpu:  AMD Ryzen 5 5600X 6-Core Processor x12
 mem_mb: 15956
 java: openjdk version "17.0.20.1" 2026-08-18 LTS
 postgres: 17.11 (Debian 17.11-1.pgdg13+2) (docker, default config)
 note: app, DB and load driver share one machine
-{"concurrency": 8, "duration_s": 30.0, "ok": 11014, "errors": {}, "throughput_rps": 367.1, "p50_ms": 20.9, "p95_ms": 29.1, "p99_ms": 35.3, "max_ms": 135.5}
-  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 63|56|429|4841 -> 111447|74751|463|156887005
+{"concurrency": 8, "duration_s": 30.0, "ok": 11135, "errors": {}, "throughput_rps": 371.2, "p50_ms": 20.9, "p95_ms": 28.2, "p99_ms": 33.2, "max_ms": 152.8}
+  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 71|60|429|4946 -> 110668|74409|470|154708282
   db: 11 connections, size 34 MB
-  pg container: cpu 0.02% mem 89.19MiB / 15.58GiB
-{"concurrency": 32, "duration_s": 30.0, "ok": 14933, "errors": {}, "throughput_rps": 497.8, "p50_ms": 56.5, "p95_ms": 102.0, "p99_ms": 133.0, "max_ms": 225.3}
-  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 111453|74751|466|156887699 -> 262480|175461|474|370045517
-  db: 11 connections, size 70 MB
-  pg container: cpu 0.03% mem 133MiB / 15.58GiB
-{"concurrency": 64, "duration_s": 30.0, "ok": 19035, "errors": {}, "throughput_rps": 634.5, "p50_ms": 103.9, "p95_ms": 114.5, "p99_ms": 127.7, "max_ms": 184.4}
-  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 262486|175461|474|370046217 -> 465859|311026|474|372409956
-  db: 11 connections, size 117 MB
-  pg container: cpu 0.04% mem 185.3MiB / 15.58GiB
+  pg container: cpu 0.54% mem 91.22MiB / 15.58GiB

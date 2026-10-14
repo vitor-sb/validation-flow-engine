@@ -36,6 +36,12 @@ O node `EXTERNAL_CALL` (`providerKey`, `query`, `expect`, `maxWait`) chama um pr
 
 Chamadas que falham ou cuja execução expirou/foi cancelada viram `DEAD` (com motivo). Operação (escopo `provider:admin`): `GET /api/v1/provider-calls?status=DEAD` e `POST /api/v1/provider-calls/{id}/retry` (só com a execução ainda `WAITING`, senão 409). Métricas: gauges `validation.provider.pending|dead` e contadores `validation.provider.callback|poll` com tags `provider` e `outcome`. Os logs trazem `executionId`, `callId`, `providerKey` e status, nunca o token nem o corpo.
 
+### Cache de respostas de provedores
+
+O cache só atua onde há **política**: `PUT /api/v1/providers/{providerKey}/cache-policies/default` (escopo `provider:admin`, auditado) com `dataCategory` `LOW_VOLATILITY|MEDIUM_VOLATILITY|HIGH_VOLATILITY|REAL_TIME|CUSTOM`. Sem política, ou com `REAL_TIME`, nada é gravado. O TTL vem da política (padrões `app.providers.cache-ttl.low|medium|high-volatility`; `CUSTOM` exige `ttlSeconds`, `justification`, `owner` e `reviewDate`) e nunca passa de `app.providers.cache-max-ttl` (P7D); resposta `found:false` vive no máximo `app.providers.negative-cache-ttl` (PT5M). A chave é o SHA-256 dos parâmetros canônicos (o documento em claro não é gravado) e a resposta guardada é só a normalizada pelo adapter, nunca o corpo bruto.
+
+O resultado do node traz `cacheStatus` (`HIT|MISS|EXPIRED|BYPASS|DISABLED`), `cacheAgeSeconds` e `cachePolicy`. `"cache": "BYPASS"` no node força chamada nova e renova a entrada. Um HIT em `EXTERNAL_CALL` não cria `provider_call`. Com `fallbackOnErrorAllowed=true`, erro retryable esgotado serve o dado vencido marcado `STALE_FALLBACK` com `fallbackReason`. Limpeza: `app.retention.provider-cache` (carência após `valid_until`; desligada se ausente) roda a cada `app.retention.interval`. Métrica: contador `validation.provider.cache` com tags `provider` e `result` (`hit|miss|expired|bypass|stale_fallback`).
+
 ### Validadores e provedores externos
 
 Validadores são beans `ValidatorStrategy` descobertos pelo registry (`GET /api/v1/node-types`). Para adicionar um, implemente a interface e registre o bean, sem tocar no executor.
@@ -112,11 +118,11 @@ Teste de carga: `loadtest/run.sh`. O baseline medido está em [`loadtest/REPORT.
 
 ## Limites e configuração
 
-Propriedades `app.*` (valores padrão no código): `limits.*` (nós, transições, timeout, tentativas, tamanho do corpo), `validators.max-threads` e `queue-capacity`, `idempotency.lease`, `retention.idempotency`, `recovery.*`.
+Propriedades `app.*` (valores padrão no código): `limits.*` (nós, transições, timeout, tentativas, tamanho do corpo), `validators.max-threads` e `queue-capacity`, `idempotency.lease`, `retention.idempotency`, `retention.provider-cache`, `recovery.*`.
 
 ## O que ainda não existe
 
-Ficou fora do MVP por decisão: `fork/join`, cache de respostas de provedores, particionamento e réplicas de leitura. Detalhes em [`tasks/coverage.md`](tasks/coverage.md).
+Ficou fora do MVP por decisão: `fork/join`, particionamento e réplicas de leitura. Detalhes em [`tasks/coverage.md`](tasks/coverage.md).
 
 ## Desenvolvimento com Ralph
 
