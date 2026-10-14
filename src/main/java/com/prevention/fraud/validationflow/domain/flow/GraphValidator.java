@@ -21,7 +21,7 @@ public class GraphValidator {
 	}
 
 	public static final int MAX_SUB_FLOW_DEPTH = 3;
-	private static final Set<String> NODE_TYPES = Set.of("START", "VALIDATION", "DECISION", "SUB_FLOW", "HUMAN_APPROVAL", "END");
+	private static final Set<String> NODE_TYPES = Set.of("START", "VALIDATION", "DECISION", "SUB_FLOW", "HUMAN_APPROVAL", "EXTERNAL_CALL", "END");
 
 	public static final int DEFAULT_MAX_NODES = 200;
 	public static final int DEFAULT_MAX_TRANSITIONS = 1000;
@@ -121,6 +121,9 @@ public class GraphValidator {
 			if (tr.containsKey("condition") && !NodeConfigRules.validCondition(tr.get("condition"))) {
 				errors.add(err("INVALID_CONDITION", id, "invalid condition"));
 			}
+		}
+		if ("EXTERNAL_CALL".equals(type) && targets.isEmpty()) {
+			errors.add(err("MISSING_TRANSITION", id, "EXTERNAL_CALL needs at least one outgoing transition"));
 		}
 		if ("HUMAN_APPROVAL".equals(type)) {
 			Set<Object> labels = new HashSet<>();

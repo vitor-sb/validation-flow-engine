@@ -38,6 +38,14 @@ class NodeTypeController {
 					Map.of("type", "string"), "deadline", Map.of("type", "string", "format", "duration"))),
 			Set.of());
 
+	/** Built-in node (not a validator): calls an async-capable provider and waits for the answer. */
+	private static final NodeType EXTERNAL_CALL = new NodeType("EXTERNAL_CALL", Map.of("type", "object", "required",
+			List.of("providerKey", "query", "maxWait"), "properties", Map.of("providerKey", Map.of("type", "string"),
+					"query", Map.of("type", "object", "description", "provider parameter -> inputData field"), "expect",
+					Map.of("type", "object", "description", "output field -> required value"), "maxWait",
+					Map.of("type", "string", "format", "duration"))),
+			Set.of("EXTERNAL_PROVIDER"));
+
 	private final ValidatorRegistry registry;
 
 	NodeTypeController(ValidatorRegistry registry) {
@@ -47,7 +55,7 @@ class NodeTypeController {
 	@GetMapping
 	@Operation(summary = "List node types", description = "All validator types registered in this deployment.", security = @SecurityRequirement(name = "apiKey", scopes = "flow:read"))
 	List<NodeType> list() {
-		return Stream.concat(registry.all().stream().map(NodeTypeController::toDto), Stream.of(HUMAN_APPROVAL)).toList();
+		return Stream.concat(registry.all().stream().map(NodeTypeController::toDto), Stream.of(HUMAN_APPROVAL, EXTERNAL_CALL)).toList();
 	}
 
 	@GetMapping("/{key}")
@@ -57,6 +65,9 @@ class NodeTypeController {
 	NodeType get(@PathVariable String key) {
 		if (HUMAN_APPROVAL.key().equals(key)) {
 			return HUMAN_APPROVAL;
+		}
+		if (EXTERNAL_CALL.key().equals(key)) {
+			return EXTERNAL_CALL;
 		}
 		return toDto(registry.find(key).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "node type not found: " + key)));
 	}

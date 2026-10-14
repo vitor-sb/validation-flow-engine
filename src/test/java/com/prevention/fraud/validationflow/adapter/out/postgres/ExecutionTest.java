@@ -52,6 +52,8 @@ class ExecutionTest {
 
 	static FlowService flows;
 
+	static com.prevention.fraud.validationflow.application.provider.ProviderCallRepository callRepo;
+
 	static ExecutionService executions;
 
 	static Runnable duringValidation = () -> { };
@@ -193,6 +195,7 @@ class ExecutionTest {
 		flowRepo = JpaTestContext.flowRepository(ctx);
 		exRepo = JpaTestContext.executionRepository(ctx);
 		idemRepo = JpaTestContext.idempotencyRepository(ctx);
+		callRepo = ctx.getBean(com.prevention.fraud.validationflow.application.provider.ProviderCallRepository.class);
 		flows = new FlowService(flowRepo, new GraphValidator(registry::contains));
 		executions = new ExecutionService(flows, exRepo, registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), 64, 64));
 	}
@@ -278,6 +281,80 @@ class ExecutionTest {
 		assertTrue(replay.replayed());
 		assertEquals(f.id(), replay.execution().id());
 		assertEquals(ExecutionStatus.WAITING, replay.execution().status());
+	}
+
+	@Test
+	void externalCallPausesOnPendingFollowsDoneAndRejectsDisabledProvider() {
+		var providers = new com.prevention.fraud.validationflow.application.provider.ProviderConfigService(
+				new com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository() {
+					public java.util.Optional<com.prevention.fraud.validationflow.application.provider.ProviderConfig> find(String tenant, String key) {
+						return "t".equals(tenant) ? java.util.Optional.of(new com.prevention.fraud.validationflow.application.provider.ProviderConfig(
+								tenant, key, true, null, null, null, null, "x", java.time.Instant.now())) : java.util.Optional.empty();
+					}
+
+					public List<com.prevention.fraud.validationflow.application.provider.ProviderConfig> findAll(String tenant) {
+						return List.of();
+					}
+
+					public void save(com.prevention.fraud.validationflow.application.provider.ProviderConfig config) {
+					}
+				}, java.time.Duration.ZERO, java.time.Clock.systemUTC());
+		var fake = new com.prevention.fraud.validationflow.application.provider.DataProvider() {
+			public String key() {
+				return "fake-async";
+			}
+
+			public Map<String, Object> fetch(com.prevention.fraud.validationflow.application.provider.ProviderConfig c, Map<String, Object> p) {
+				return Map.of();
+			}
+
+			public com.prevention.fraud.validationflow.application.provider.ProviderResult start(
+					com.prevention.fraud.validationflow.application.provider.ProviderConfig c, Map<String, Object> p) {
+				return "now".equals(p.get("id"))
+						? new com.prevention.fraud.validationflow.application.provider.ProviderResult.Done(Map.of("active", true))
+						: new com.prevention.fraud.validationflow.application.provider.ProviderResult.Pending("ext-1",
+								com.prevention.fraud.validationflow.application.provider.ProviderResult.Mode.POLL, java.time.Duration.ofSeconds(30));
+			}
+		};
+		var handlers = new java.util.ArrayList<>(com.prevention.fraud.validationflow.application.execution.node.NodeHandlers
+				.defaults(new ValidatorRegistry(List.of(FAKE)), new ValidatorRunner(new MicrometerExecutionMetrics(meters), 4, 4),
+						new com.prevention.fraud.validationflow.application.execution.node.SubFlowRunner(flows)));
+		handlers.add(new com.prevention.fraud.validationflow.application.execution.node.NodeHandlers.ExternalCall(
+				Map.of("fake-async", fake), providers, callRepo));
+		var svc = new ExecutionService(flows, exRepo, handlers, new MicrometerExecutionMetrics(meters));
+		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "x"))),
+				"x", Map.of("type", "EXTERNAL_CALL", "config", Map.of("providerKey", "fake-async", "query", Map.of("id", "doc"),
+						"expect", Map.of("active", true), "maxWait", "PT1H"), "transitions", List.of(
+								Map.of("to", "ok", "condition", cond("nodes.x.success", true)), Map.of("to", "no"))),
+				"ok", Map.of("type", "END", "config", Map.of("decision", "APPROVED")),
+				"no", Map.of("type", "END", "config", Map.of("decision", "DENIED"))));
+		activate("k-ext", "CEXT", g, List.of());
+
+		FlowExecution waiting = svc.execute("t", null, "PF", "CEXT", Map.of("doc", "d-1"), null);
+		assertEquals(ExecutionStatus.WAITING, waiting.status());
+		assertEquals("x", waiting.waitingNodeId());
+		assertEquals("PROVIDER_PENDING", waiting.waitReason());
+		assertTrue(waiting.waitDeadline().isAfter(java.time.Instant.now().plusSeconds(3000)));
+		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM provider_call WHERE tenant_id = 't' AND execution_id = ? "
+				+ "AND status = 'PENDING' AND mode = 'POLL' AND external_ref = 'ext-1' AND next_poll_at IS NOT NULL",
+				Integer.class, waiting.id()));
+
+		FlowExecution done = svc.execute("t", null, "PF", "CEXT", Map.of("doc", "now"), null);
+		assertEquals(ExecutionStatus.COMPLETED, done.status());
+		assertEquals("APPROVED", ((Map<?, ?>) ((Map<?, ?>) done.result()).get("config")).get("decision"));
+
+		flows.activate("other", flows.createDraft("other", "o",
+				new FlowService.CreateFlow("k-ext", "PF", "CEXT", "d", null, g, List.of(), null)).id());
+		FlowExecution disabled = svc.execute("other", null, "PF", "CEXT", Map.of("doc", "d-1"), null);
+		assertEquals(ExecutionStatus.FAILED, disabled.status());
+		assertEquals("PROVIDER_DISABLED", disabled.errorInfo().get("code"));
+		assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM provider_call WHERE tenant_id = 'other'", Integer.class));
+
+		var guarded = new FlowService(flowRepo, new GraphValidator(new ValidatorRegistry(List.of(FAKE))::contains),
+				new ValidatorRegistry(List.of(FAKE)), providers);
+		assertEquals("PROVIDER_DISABLED", guarded.disabledProviders("other", g).get(0).code());
+		assertTrue(guarded.disabledProviders("t", g).isEmpty());
 	}
 
 	@Test

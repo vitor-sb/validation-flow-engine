@@ -41,18 +41,7 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		var config = configs.resolve(input.tenantId(), provider.key())
 				.orElseThrow(() -> new ValidatorException("PROVIDER_DISABLED", key + " is not enabled for this tenant", false));
 		Map<String, Object> params = asMap(input.config().get("params"));
-		Map<String, Object> inputData = asMap(input.data().get("inputData"));
-		Map<String, Object> query = new LinkedHashMap<>();
-		asMap(params.get("query")).forEach((param, field) -> {
-			Object value = inputData.get(String.valueOf(field));
-			if (value == null) {
-				throw new ValidatorException("MISSING_INPUT", "input field '" + field + "' is required by " + key, false);
-			}
-			query.put(param, value);
-		});
-		if (query.isEmpty()) {
-			throw new ValidatorException("INVALID_CONFIG", "params.query is required by " + key, false);
-		}
+		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
 		Map<String, Object> data;
 		try {
 			data = provider.fetch(config, query);
@@ -60,9 +49,7 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		catch (ProviderException e) {
 			throw new ValidatorException(e.code(), e.getMessage(), e.retryable());
 		}
-		Map<String, Object> expect = asMap(params.get("expect"));
-		boolean ok = expect.entrySet().stream()
-				.allMatch(e -> String.valueOf(e.getValue()).equals(String.valueOf(data.get(e.getKey()))));
+		boolean ok = matches(params.get("expect"), data);
 		return new ValidationResult(ok, data);
 	}
 
@@ -81,6 +68,28 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 	@Override
 	public Set<String> capabilities() {
 		return Set.of("EXTERNAL_PROVIDER", "RETRY", "TIMEOUT");
+	}
+
+	/** Provider parameters from {@code inputData} per the node's {@code query} mapping; {@code owner} names the node in errors. */
+	public static Map<String, Object> query(String owner, Object queryConfig, Map<String, Object> inputData) {
+		Map<String, Object> query = new LinkedHashMap<>();
+		asMap(queryConfig).forEach((param, field) -> {
+			Object value = inputData.get(String.valueOf(field));
+			if (value == null) {
+				throw new ValidatorException("MISSING_INPUT", "input field '" + field + "' is required by " + owner, false);
+			}
+			query.put(param, value);
+		});
+		if (query.isEmpty()) {
+			throw new ValidatorException("INVALID_CONFIG", "params.query is required by " + owner, false);
+		}
+		return query;
+	}
+
+	/** True when every {@code expect} entry equals the provider's field (compared as strings). */
+	public static boolean matches(Object expect, Map<String, Object> data) {
+		return asMap(expect).entrySet().stream()
+				.allMatch(e -> String.valueOf(e.getValue()).equals(String.valueOf(data.get(e.getKey()))));
 	}
 
 	private static Map<String, Object> asMap(Object o) {

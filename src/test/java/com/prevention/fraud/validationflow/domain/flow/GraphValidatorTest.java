@@ -234,4 +234,21 @@ class GraphValidatorTest {
 		assertEquals("GRAPH_TOO_LARGE", new GraphValidator("doc-check"::equals, 10, 1).validate(valid()).get(0).code());
 	}
 
+
+	@Test
+	void externalCallRules() {
+		java.util.function.BiFunction<Map<String, Object>, String[], List<String>> codes = (config, targets) -> {
+			Map<String, Object> g = valid();
+			nodes(g).put("ext", node("EXTERNAL_CALL", config, targets));
+			((Map<String, Object>) nodes(g).get("check")).put("transitions", List.of(Map.of("to", "ext")));
+			return validator.validate(g).stream().map(GraphValidator.GraphError::code).toList();
+		};
+		Map<String, Object> ok = Map.of("providerKey", "p", "query", Map.of("id", "doc"), "maxWait", "PT1H");
+		assertEquals(List.of(), codes.apply(ok, new String[] { "end" }));
+		assertTrue(codes.apply(Map.of("providerKey", "p", "query", Map.of("id", "doc")), new String[] { "end" }).contains("INVALID_MAX_WAIT"));
+		assertTrue(codes.apply(Map.of("providerKey", "p", "query", Map.of("id", "doc"), "maxWait", "P30D"), new String[] { "end" }).contains("INVALID_MAX_WAIT"));
+		assertTrue(codes.apply(Map.of("maxWait", "PT1H"), new String[] { "end" }).contains("INVALID_EXTERNAL_CALL"));
+		assertTrue(codes.apply(ok, new String[] {}).contains("MISSING_TRANSITION"));
+	}
+
 }

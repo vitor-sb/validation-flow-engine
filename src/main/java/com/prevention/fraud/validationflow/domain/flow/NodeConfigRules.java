@@ -42,6 +42,25 @@ class NodeConfigRules {
 		if ("HUMAN_APPROVAL".equals(type)) {
 			humanApproval(id, config, errors);
 		}
+		if ("EXTERNAL_CALL".equals(type)) {
+			externalCall(id, config, errors);
+		}
+	}
+
+	private void externalCall(String id, Map<String, Object> config, List<GraphError> errors) {
+		if (!(config.get("providerKey") instanceof String k) || k.isBlank() || map(config.get("query")).isEmpty()
+				|| (config.containsKey("expect") && !(config.get("expect") instanceof Map))) {
+			errors.add(err("INVALID_EXTERNAL_CALL", id, "EXTERNAL_CALL requires providerKey and a non-empty query; expect must be an object"));
+		}
+		try {
+			Duration d = Duration.parse((String) config.get("maxWait"));
+			if (d.compareTo(Duration.ZERO) <= 0 || d.compareTo(maxWait) > 0) {
+				throw new IllegalArgumentException();
+			}
+		}
+		catch (RuntimeException e) {
+			errors.add(err("INVALID_MAX_WAIT", id, "maxWait is required: a positive ISO-8601 duration of at most " + maxWait));
+		}
 	}
 
 	private void humanApproval(String id, Map<String, Object> config, List<GraphError> errors) {

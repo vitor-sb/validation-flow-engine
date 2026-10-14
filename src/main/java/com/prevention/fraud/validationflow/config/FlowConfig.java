@@ -10,7 +10,12 @@ import com.prevention.fraud.validationflow.application.execution.ExecutionServic
 import com.prevention.fraud.validationflow.application.execution.idempotency.IdempotentExecutionService;
 import com.prevention.fraud.validationflow.application.execution.node.ValidatorRunner;
 import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository;
+import com.prevention.fraud.validationflow.application.execution.node.NodeHandlers;
+import com.prevention.fraud.validationflow.application.execution.node.SubFlowRunner;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
+import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
 import com.prevention.fraud.validationflow.domain.flow.GraphValidator;
@@ -26,11 +31,17 @@ class FlowConfig {
 
 	@Bean
 	ExecutionService executionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
-			io.micrometer.core.instrument.MeterRegistry meters,
+			io.micrometer.core.instrument.MeterRegistry meters, ObjectProvider<DataProvider> providers,
+			ProviderConfigService providerConfigs, ProviderCallRepository calls,
 			// caps threads stuck in validators that ignore interrupt; size to expected concurrent timed validators
 			@org.springframework.beans.factory.annotation.Value("${app.validators.max-threads:64}") int maxThreads,
 			@org.springframework.beans.factory.annotation.Value("${app.validators.queue-capacity:128}") int queueCapacity) {
-		return new ExecutionService(flows, repository, registry, new ValidatorRunner(new MicrometerExecutionMetrics(meters), maxThreads, queueCapacity));
+		var runner = new ValidatorRunner(new MicrometerExecutionMetrics(meters), maxThreads, queueCapacity);
+		java.util.Map<String, DataProvider> byKey = new java.util.HashMap<>();
+		providers.orderedStream().forEach(p -> byKey.put(p.key(), p));
+		var handlers = new java.util.ArrayList<>(NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)));
+		handlers.add(new NodeHandlers.ExternalCall(byKey, providerConfigs, calls));
+		return new ExecutionService(flows, repository, handlers, runner.metrics());
 	}
 
 	@Bean

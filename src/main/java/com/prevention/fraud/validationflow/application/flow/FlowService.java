@@ -4,6 +4,7 @@ import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
@@ -49,8 +50,12 @@ public class FlowService {
 			return out;
 		}
 		((Map<String, Map<String, Object>>) nodes).forEach((nodeId, node) -> {
-			if (node.get("config") instanceof Map<?, ?> cfg && cfg.get("validatorType") instanceof String type) {
-				validators.find(type).map(ValidatorStrategy::providerKey)
+			if (node.get("config") instanceof Map<?, ?> cfg && (cfg.get("validatorType") instanceof String
+					|| "EXTERNAL_CALL".equals(node.get("type")))) {
+				Optional<String> providerKey = "EXTERNAL_CALL".equals(node.get("type"))
+						? Optional.ofNullable((String) cfg.get("providerKey"))
+						: validators.find((String) cfg.get("validatorType")).map(ValidatorStrategy::providerKey);
+				providerKey
 						.filter(key -> providers.resolve(tenantId, key).isEmpty())
 						.ifPresent(key -> out.add(new GraphValidator.GraphError("PROVIDER_DISABLED", nodeId,
 								"provider " + key + " is disabled for this tenant")));
