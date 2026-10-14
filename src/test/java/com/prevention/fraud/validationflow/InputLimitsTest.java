@@ -45,6 +45,9 @@ class InputLimitsTest {
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.provider.ProviderCallRepository providerCallRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository providerCacheRepository;
+
 	static String graph(int nodes) {
 		StringBuilder sb = new StringBuilder("{\"startNodeId\":\"n0\",\"nodes\":{");
 		for (int i = 0; i < nodes; i++) {

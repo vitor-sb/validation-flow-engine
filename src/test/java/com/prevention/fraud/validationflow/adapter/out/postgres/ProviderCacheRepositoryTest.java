@@ -1,0 +1,58 @@
+package com.prevention.fraud.validationflow.adapter.out.postgres;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+
+import com.prevention.fraud.validationflow.application.provider.ProviderCache;
+import com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy;
+import com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository;
+
+@Testcontainers(disabledWithoutDocker = true)
+class ProviderCacheRepositoryTest {
+
+	@Container
+	static PostgreSQLContainer pg = new PostgreSQLContainer("postgres:16");
+
+	@Test
+	void storesOnlyWithPolicyAndIsolatesTenantAndProvider() {
+		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
+		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
+		var cache = new ProviderCache(repo);
+		var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		var params = Map.<String, Object>of("document", "12345678901", "kind", "cpf");
+		var reordered = Map.<String, Object>of("kind", "cpf", "document", "12345678901");
+		var data = Map.<String, Object>of("found", true);
+
+		// no policy: nothing cached
+		assertFalse(cache.store("tenant-a", "p1", "lookup", params, data, now));
+		assertTrue(cache.find("tenant-a", "p1", "lookup", params).isEmpty());
+
+		repo.savePolicy(new ProviderCachePolicy("tenant-a", "p1", "lookup", "LOW_VOLATILITY", 60, false, null, null, null));
+		assertTrue(cache.store("tenant-a", "p1", "lookup", params, data, now));
+		var hit = cache.find("tenant-a", "p1", "lookup", reordered).orElseThrow();
+		assertEquals(data, hit.response());
+		assertEquals(now.plusSeconds(60), hit.validUntil());
+		assertFalse(hit.requestKey().contains("12345678901"));
+
+		// storing again replaces the entry (unique key)
+		assertTrue(cache.store("tenant-a", "p1", "lookup", params, Map.of("found", false), now.plusSeconds(5)));
+		assertEquals(Map.of("found", false), cache.find("tenant-a", "p1", "lookup", params).orElseThrow().response());
+
+		assertTrue(cache.find("tenant-b", "p1", "lookup", params).isEmpty());
+		assertTrue(cache.find("tenant-a", "p2", "lookup", params).isEmpty());
+		assertNotEquals(ProviderCache.requestKey(params), ProviderCache.requestKey(Map.of("document", "other")));
+	}
+
+}

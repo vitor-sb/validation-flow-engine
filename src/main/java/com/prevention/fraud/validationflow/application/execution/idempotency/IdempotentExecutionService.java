@@ -3,15 +3,11 @@ package com.prevention.fraud.validationflow.application.execution.idempotency;
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
+import com.prevention.fraud.validationflow.application.shared.CanonicalHash;
 import com.prevention.fraud.validationflow.domain.execution.FlowExecution;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.HexFormat;
 import java.util.Map;
-import java.util.TreeMap;
 
 public class IdempotentExecutionService {
 
@@ -39,7 +35,7 @@ public class IdempotentExecutionService {
 	 */
 	public Outcome executeIdempotent(String tenantId, String key, String flowKey, String userType,
 			String context, Map<String, Object> inputData, String correlationId) {
-		String hash = hash(Arrays.asList(flowKey, userType, context, inputData, correlationId));
+		String hash = CanonicalHash.sha256(Arrays.asList(flowKey, userType, context, inputData, correlationId));
 		long deadline = System.nanoTime() + IDEMPOTENCY_WAIT.toNanos();
 		while (true) {
 			if (repository.claimIdempotency(tenantId, key, hash, lease)) {
@@ -74,32 +70,5 @@ public class IdempotentExecutionService {
 				throw FlowException.conflict("interrupted while waiting for the request with this Idempotency-Key");
 			}
 		}
-	}
-
-	/** SHA-256 of a canonical rendering (map keys sorted) so key order in the payload doesn't matter. */
-	private static String hash(Object payload) {
-		try {
-			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-					.digest(canonical(payload).getBytes(StandardCharsets.UTF_8)));
-		}
-		catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException(e);
-		}
-	}
-
-	private static String canonical(Object o) {
-		if (o instanceof Map<?, ?> m) {
-			var sb = new StringBuilder("{");
-			new TreeMap<String, Object>(m.entrySet().stream()
-					.collect(java.util.stream.Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue)))
-					.forEach((k, v) -> sb.append(k.length()).append(':').append(k).append('=').append(canonical(v)).append(','));
-			return sb.append('}').toString();
-		}
-		if (o instanceof Iterable<?> it) {
-			var sb = new StringBuilder("[");
-			it.forEach(v -> sb.append(canonical(v)).append(','));
-			return sb.append(']').toString();
-		}
-		return o == null ? "null" : o.getClass().getSimpleName() + ":" + o;
 	}
 }

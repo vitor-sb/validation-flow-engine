@@ -82,6 +82,9 @@ class ValidatorRegistryTest {
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.provider.ProviderCallRepository providerCallRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository providerCacheRepository;
+
 	@Test
 	void discoversNewValidatorAndExecutesItViaRegistry() {
 		var result = registry.find("fake").orElseThrow()

@@ -36,6 +36,9 @@ class HealthEndpointsTest {
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.provider.ProviderCallRepository providerCallRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository providerCacheRepository;
+
 	@Autowired
 	MockMvc mvc;
 

@@ -52,6 +52,9 @@ class FlowCreateTest {
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.provider.ProviderCallRepository providerCallRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository providerCacheRepository;
+
 	static final String VALID = """
 			{"flowKey":"kyc","userType":"PF","context":"ONBOARDING","displayName":"KYC",
 			 "graphDefinition":{"startNodeId":"s","nodes":[],"edges":[]},

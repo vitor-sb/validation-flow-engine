@@ -24,7 +24,8 @@ final class JpaTestContext {
 	@EnableAutoConfiguration
 	@Import({ JpaFlowRepository.class, JpaExecutionRepository.class, JpaIdempotencyRepository.class,
 			com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaProviderConfigRepository.class,
-			com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaProviderCallRepository.class })
+			com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaProviderCallRepository.class,
+			com.prevention.fraud.validationflow.adapter.out.postgres.repository.JpaProviderCacheRepository.class })
 	static class Config {
 
 		@org.springframework.context.annotation.Bean
