@@ -24,6 +24,11 @@ public class JpaProviderCallRepository implements ProviderCallRepository {
 	}
 
 	@Override
+	public Optional<ProviderCall> findById(UUID id) {
+		return calls.findById(id).map(ProviderCallMapper::toDomain);
+	}
+
+	@Override
 	public Optional<ProviderCall> find(String tenantId, UUID id) {
 		return calls.findByTenantIdAndId(tenantId, id).map(ProviderCallMapper::toDomain);
 	}

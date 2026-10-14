@@ -15,6 +15,8 @@ import com.prevention.fraud.validationflow.application.execution.node.SubFlowRun
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
+import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
+import com.prevention.fraud.validationflow.application.execution.ProviderCallbackService;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
@@ -42,6 +44,14 @@ class FlowConfig {
 		var handlers = new java.util.ArrayList<>(NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)));
 		handlers.add(new NodeHandlers.ExternalCall(byKey, providerConfigs, calls));
 		return new ExecutionService(flows, repository, handlers, runner.metrics());
+	}
+
+	@Bean
+	ProviderCallbackService providerCallbackService(ProviderCallRepository calls, ProviderConfigService configs,
+			ObjectProvider<DataProvider> providers, CredentialResolver credentials, ExecutionService executions) {
+		return new ProviderCallbackService(calls, configs,
+				providers.orderedStream().collect(java.util.stream.Collectors.toMap(DataProvider::key, p -> p)),
+				credentials, executions, java.time.Clock.systemUTC());
 	}
 
 	@Bean

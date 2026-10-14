@@ -27,6 +27,8 @@ class SecurityConfig {
 				.exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/actuator/health/**", "/api/v1/health").permitAll()
+						// authenticated by the call's own token (see ProviderCallbackService), not by an API key
+						.requestMatchers(HttpMethod.POST, "/api/v1/provider-callbacks/*").permitAll()
 						.requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 						.requestMatchers(HttpMethod.PATCH, "/api/v1/flows/*/activate").hasAuthority("SCOPE_flow:activate")
 						.requestMatchers(HttpMethod.PATCH, "/api/v1/flows/*/archive").hasAuthority("SCOPE_flow:activate")

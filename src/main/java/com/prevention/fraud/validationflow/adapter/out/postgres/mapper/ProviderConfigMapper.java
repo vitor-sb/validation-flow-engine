@@ -10,7 +10,7 @@ public final class ProviderConfigMapper {
 
 	public static ProviderConfig toDomain(ProviderConfigEntity e) {
 		return new ProviderConfig(e.id.tenantId(), e.id.providerKey(), e.enabled, e.baseUrl, e.connectTimeoutMs,
-				e.readTimeoutMs, e.credentialsRef, e.updatedBy, e.updatedAt);
+				e.readTimeoutMs, e.credentialsRef, e.callbackSecretRef, e.updatedBy, e.updatedAt);
 	}
 
 	public static ProviderConfigEntity toEntity(ProviderConfig c) {
@@ -21,6 +21,7 @@ public final class ProviderConfigMapper {
 		e.connectTimeoutMs = c.connectTimeoutMs();
 		e.readTimeoutMs = c.readTimeoutMs();
 		e.credentialsRef = c.credentialsRef();
+		e.callbackSecretRef = c.callbackSecretRef();
 		e.updatedBy = c.updatedBy();
 		e.updatedAt = c.updatedAt();
 		return e;

@@ -36,7 +36,7 @@ public class ProviderConfigService {
 	/** Persists the row (the repository audits it) and drops the cached entry, so this process sees it at once. */
 	public ProviderConfig save(ProviderConfig config) {
 		var saved = new ProviderConfig(config.tenantId(), config.providerKey(), config.enabled(), config.baseUrl(),
-				config.connectTimeoutMs(), config.readTimeoutMs(), config.credentialsRef(), config.updatedBy(), clock.instant());
+				config.connectTimeoutMs(), config.readTimeoutMs(), config.credentialsRef(), config.callbackSecretRef(), config.updatedBy(), clock.instant());
 		repository.save(saved);
 		invalidate(saved.tenantId(), saved.providerKey());
 		return saved;

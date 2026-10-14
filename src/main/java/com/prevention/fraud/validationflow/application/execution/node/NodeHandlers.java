@@ -1,6 +1,7 @@
 package com.prevention.fraud.validationflow.application.execution.node;
 
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
+import com.prevention.fraud.validationflow.application.provider.CallbackHandle;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
 import com.prevention.fraud.validationflow.application.provider.ProviderCall;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
@@ -160,9 +161,11 @@ public final class NodeHandlers {
 				return fail(s, "PROVIDER_DISABLED", key + " is not enabled for this tenant", false);
 			}
 			ProviderResult r;
+			// the clear token goes to the provider only; the row keeps its hash
+			var callback = new CallbackHandle(UUID.randomUUID(), ProviderCall.newToken());
 			try {
 				Map<String, Object> inputData = Maps.of(s.ctx().get("inputData"));
-				r = provider.start(config, ProviderBackedValidator.query(s.nodeId(), raw.get("query"), inputData));
+				r = provider.start(config, ProviderBackedValidator.query(s.nodeId(), raw.get("query"), inputData), callback);
 			}
 			catch (ProviderException e) {
 				return fail(s, e.code(), e.getMessage(), e.retryable());
@@ -180,11 +183,10 @@ public final class NodeHandlers {
 			var p = (ProviderResult.Pending) r;
 			Instant now = Instant.now();
 			Instant deadline = now.plus(Duration.parse((String) raw.get("maxWait")));
-			UUID callId = UUID.randomUUID();
-			// the clear callback token is not kept: delivering it to the provider is the callback endpoint's job
+			UUID callId = callback.callId();
 			calls.save(new ProviderCall(callId, s.ex().tenantId(), s.ex().id(), s.nodeId(), key, p.externalRef(), p.mode(),
 					ProviderCall.Status.PENDING, 0, p.mode() == ProviderResult.Mode.POLL ? now.plus(p.pollAfter()) : null,
-					deadline, ProviderCall.hashToken(ProviderCall.newToken()), now, now));
+					deadline, ProviderCall.hashToken(callback.token()), now, now));
 			return s.pause("PROVIDER_PENDING", deadline,
 					Map.of("callId", callId.toString(), "providerKey", key, "mode", p.mode().name()));
 		}

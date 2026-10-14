@@ -169,6 +169,40 @@ public class ExecutionService {
 		}
 		String next = Maps.list(node.get("transitions")).stream().filter(t -> decision.equals(t.get("label")))
 				.map(t -> (String) t.get("to")).findFirst().orElse(null);
+		Map<String, Object> decided = new LinkedHashMap<>();
+		decided.put("decision", decision);
+		decided.put("decidedBy", actor);
+		if (note != null) {
+			decided.put("note", note);
+		}
+		if (evidence != null) {
+			decided.put("evidence", evidence);
+		}
+		return resumeAt(waiting, node, decided, decided, next, false);
+	}
+
+	/**
+	 * Resumes the execution waiting on an EXTERNAL_CALL node with the provider's normalized {@code data}: the node output
+	 * is the data plus {@code success} (like VALIDATION) and the transitions are evaluated normally. 409 if the
+	 * execution is not waiting at {@code nodeId}.
+	 */
+	public FlowExecution resumeWithProviderResult(String tenantId, UUID id, String nodeId, UUID callId,
+			Map<String, Object> data, boolean success) {
+		FlowExecution waiting = get(tenantId, id);
+		if (waiting.status() != ExecutionStatus.WAITING || !nodeId.equals(waiting.waitingNodeId())) {
+			throw FlowException.conflict("execution is not waiting for this call (status " + waiting.status() + ")");
+		}
+		Map<String, Object> node = Maps.of(Maps.of(waiting.snapshot().get("nodes")).get(nodeId));
+		Map<String, Object> out = new LinkedHashMap<>(data);
+		out.put("success", success);
+		return resumeAt(waiting, node, out, Map.of("callId", callId.toString(), "source", "PROVIDER"), null, true);
+	}
+
+	/** Shared continuation: stores {@code output} for the waiting node, then follows {@code next} or, if {@code byTransitions}, the node's own transitions. */
+	private FlowExecution resumeAt(FlowExecution waiting, Map<String, Object> node, Map<String, Object> output,
+			Map<String, Object> auditDetails, String next, boolean byTransitions) {
+		String nodeId = waiting.waitingNodeId();
+		String tenantId = waiting.tenantId();
 		FlowExecution ex;
 		try {
 			ex = save(waiting.resume());
@@ -182,21 +216,14 @@ public class ExecutionService {
 		ctx.put("nodes", outputs);
 		var outerMdc = recorder.enterMdc(ex, ex.correlationId());
 		try {
-			Map<String, Object> decided = new LinkedHashMap<>();
-			decided.put("decision", decision);
-			decided.put("decidedBy", actor);
-			if (note != null) {
-				decided.put("note", note);
-			}
-			if (evidence != null) {
-				decided.put("evidence", evidence);
-			}
-			outputs.put(nodeId, decided);
-			recorder.recordNode(ex, nodeId, (String) node.get("type"), 2, "COMPLETED", decided, null, ctx, Instant.now());
-			repository.audit(tenantId, id, "EXECUTION_RESUMED", nodeId, decided);
-			FlowExecution done = next == null
-					? save(ex.fail(ctx, "NO_MATCHING_TRANSITION", "no transition for decision at node " + nodeId))
-					: walk(ex, ctx, outputs, List.of(ex.flowKey()), next);
+			outputs.put(nodeId, output);
+			recorder.recordNode(ex, nodeId, (String) node.get("type"), 2, "COMPLETED", output, null, ctx, Instant.now());
+			repository.audit(tenantId, ex.id(), "EXECUTION_RESUMED", nodeId, auditDetails);
+			String target = byTransitions ? nextNode(ex, nodeId, node, ctx) : next;
+			FlowExecution done = target == null
+					? save(ex.fail(ctx, "NO_MATCHING_TRANSITION", byTransitions
+							? "no transition matched at node " + nodeId : "no transition for decision at node " + nodeId))
+					: walk(ex, ctx, outputs, List.of(ex.flowKey()), target);
 			recorder.finished(done);
 			continueParent(done, ctx);
 			return done;

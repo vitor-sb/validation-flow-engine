@@ -40,12 +40,13 @@ class ProviderController {
 
 	record ProviderConfigRequest(boolean enabled, @Size(max = 500) @Schema(example = "https://brasilapi.com.br/api") String baseUrl,
 			@Positive @Schema(example = "2000") Integer connectTimeoutMs, @Positive @Schema(example = "5000") Integer readTimeoutMs,
-			@Size(max = 200) @Schema(description = "Name of the secret (e.g. an environment variable), never the secret itself", example = "BUREAU_TOKEN") String credentialsRef) {
+			@Size(max = 200) @Schema(description = "Name of the secret (e.g. an environment variable), never the secret itself", example = "BUREAU_TOKEN") String credentialsRef,
+			@Size(max = 200) @Schema(description = "Name of the secret used to verify the HMAC-SHA256 signature of provider callbacks (optional)", example = "BUREAU_CALLBACK_SECRET") String callbackSecretRef) {
 	}
 
 	record ProviderConfigResponse(String providerKey, boolean enabled, String baseUrl, Integer connectTimeoutMs,
 			Integer readTimeoutMs, @Schema(description = "Reference to the secret; the secret is never returned") String credentialsRef,
-			String updatedBy, Instant updatedAt) {
+			String callbackSecretRef, String updatedBy, Instant updatedAt) {
 	}
 
 	private final ProviderConfigService service;
@@ -77,7 +78,7 @@ class ProviderController {
 		}
 		checkUrl(r.baseUrl());
 		return toResponse(service.save(new ProviderConfig(principal.tenantId(), providerKey, r.enabled(), r.baseUrl(),
-				r.connectTimeoutMs(), r.readTimeoutMs(), r.credentialsRef(), principal.subject(), null)));
+				r.connectTimeoutMs(), r.readTimeoutMs(), r.credentialsRef(), r.callbackSecretRef(), principal.subject(), null)));
 	}
 
 	private void checkUrl(String url) {
@@ -98,7 +99,7 @@ class ProviderController {
 
 	private static ProviderConfigResponse toResponse(ProviderConfig c) {
 		return new ProviderConfigResponse(c.providerKey(), c.enabled(), c.baseUrl(), c.connectTimeoutMs(),
-				c.readTimeoutMs(), c.credentialsRef(), c.updatedBy(), c.updatedAt());
+				c.readTimeoutMs(), c.credentialsRef(), c.callbackSecretRef(), c.updatedBy(), c.updatedAt());
 	}
 
 }

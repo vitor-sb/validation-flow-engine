@@ -33,6 +33,9 @@ public class ProviderConfigEntity {
 	@Column(name = "credentials_ref")
 	public String credentialsRef;
 
+	@Column(name = "callback_secret_ref")
+	public String callbackSecretRef;
+
 	@Column(name = "updated_by")
 	public String updatedBy;
 

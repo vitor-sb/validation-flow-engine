@@ -23,6 +23,19 @@ public interface DataProvider {
 		return new ProviderResult.Done(fetch(config, params));
 	}
 
+	/**
+	 * Starts a call whose answer may come back as a callback: {@code callback} carries the id and clear token the provider
+	 * must send back. Providers that support callbacks override this; the default ignores the handle.
+	 */
+	default ProviderResult start(ProviderConfig config, Map<String, Object> params, CallbackHandle callback) {
+		return start(config, params);
+	}
+
+	/** Normalizes a callback body to the same canonical shape as {@link #fetch}; throws {@link ProviderException} if unusable. */
+	default Map<String, Object> normalizeCallback(ProviderConfig config, Map<String, Object> body) {
+		throw new UnsupportedOperationException(key() + " does not accept callbacks");
+	}
+
 	/** Checks a pending call. Only async providers implement it. */
 	default ProviderResult poll(ProviderConfig config, String externalRef) {
 		throw new UnsupportedOperationException(key() + " is not asynchronous");
