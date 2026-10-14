@@ -77,10 +77,10 @@ class FlowConfig {
 
 	@Bean
 	ProviderCallbackService providerCallbackService(ProviderCallRepository calls, ProviderConfigService configs,
-			ObjectProvider<DataProvider> providers, CredentialResolver credentials, ExecutionService executions, ProviderMetrics metrics) {
+			ObjectProvider<DataProvider> providers, CredentialResolver credentials, ExecutionService executions, ProviderMetrics metrics, ProviderCache cache) {
 		return new ProviderCallbackService(calls, configs,
 				providers.orderedStream().collect(java.util.stream.Collectors.toMap(DataProvider::key, p -> p)),
-				credentials, executions, java.time.Clock.systemUTC(), metrics);
+				credentials, executions, java.time.Clock.systemUTC(), metrics, cache);
 	}
 
 	@Bean

@@ -89,6 +89,9 @@ class ProviderPollTest {
 	@Autowired
 	List<DataProvider> providers;
 
+	@Autowired
+	com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository cacheRepo;
+
 	static class TestClock extends Clock {
 		Instant now = Instant.now();
 
@@ -223,6 +226,35 @@ class ProviderPollTest {
 		assertEquals("FAILED", callStatus(off));
 		assertEquals("PENDING", callStatus(on));
 		assertTrue(POLLS.getOrDefault("slow-2", 0) == 0);
+	}
+
+	@Test
+	void asyncCompletionStoresInCacheWhenPolicyAllows() {
+		var f = start("poll-cache", "slow-4", true);
+		cacheRepo.savePolicy(new com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy("poll-cache", "fake-poll",
+				com.prevention.fraud.validationflow.application.provider.ProviderCache.OPERATION, "LOW_VOLATILITY", 3600, false, null, null,
+				null), "t");
+		var poller = poller();
+		for (int i = 0; i < 3; i++) {
+			clock.now = clock.now.plusSeconds(120);
+			poller.pollDue();
+		}
+		assertEquals("COMPLETED", exStatus(f));
+		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM provider_cache_entry WHERE tenant_id = 'poll-cache'", Integer.class));
+	}
+
+	@Test
+	void completionAfterCrashBetweenResumeAndMarkCompletedFinishesTheBookkeeping() {
+		var f = start("poll-crash", "slow-5", true);
+		var call = calls.find("poll-crash", jdbc.queryForObject("SELECT id FROM provider_call WHERE execution_id = ?",
+				java.util.UUID.class, f.id())).orElseThrow();
+		// the execution resumed, then the app died before provider_call was marked COMPLETED
+		executions.resumeWithProviderResult("poll-crash", f.id(), call.nodeId(), call.id(), Map.of("active", true), true);
+		assertEquals("PENDING", callStatus(f));
+
+		assertEquals(ProviderCallbackService.Outcome.DUPLICATE, completion.complete(call, Map.of("active", true)));
+		assertEquals("COMPLETED", callStatus(f));
+		assertEquals("COMPLETED", exStatus(f));
 	}
 
 }

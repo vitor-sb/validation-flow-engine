@@ -14,6 +14,7 @@ import javax.crypto.spec.SecretKeySpec;
 import com.prevention.fraud.validationflow.application.execution.node.Maps;
 import com.prevention.fraud.validationflow.application.flow.FlowException;
 import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
+import com.prevention.fraud.validationflow.application.provider.ProviderCache;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
 import com.prevention.fraud.validationflow.application.provider.ProviderCall;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
@@ -40,10 +41,12 @@ public class ProviderCallbackService {
 	private final ExecutionService executions;
 	private final Clock clock;
 	private final ProviderMetrics metrics;
+	private final ProviderCache cache;
 
 	public ProviderCallbackService(ProviderCallRepository calls, ProviderConfigService configs,
 			Map<String, DataProvider> providers, CredentialResolver credentials, ExecutionService executions, Clock clock,
-			ProviderMetrics metrics) {
+			ProviderMetrics metrics, ProviderCache cache) {
+		this.cache = cache;
 		this.calls = calls;
 		this.configs = configs;
 		this.providers = providers;
@@ -107,25 +110,51 @@ public class ProviderCallbackService {
 		}
 	}
 
-	/** Resumes the waiting execution with an already normalized result and marks the call COMPLETED; 409 (call FAILED) if it can no longer resume. */
+	/**
+	 * Resumes the waiting execution with an already normalized result and marks the call COMPLETED; 409 (call FAILED) if it
+	 * can no longer resume. If an earlier attempt resumed the execution but crashed before marking the call, the retry finds
+	 * the call id in the node output and just finishes the bookkeeping.
+	 */
 	public Outcome complete(ProviderCall call, Map<String, Object> data) {
-		var node = Maps.of(Maps.of(executions.get(call.tenantId(), call.executionId()).snapshot().get("nodes")).get(call.nodeId()));
+		var execution = executions.get(call.tenantId(), call.executionId());
+		var node = Maps.of(Maps.of(execution.snapshot().get("nodes")).get(call.nodeId()));
 		boolean success = ProviderBackedValidator.matches(Maps.of(node.get("config")).get("expect"), data);
 		try {
 			executions.resumeWithProviderResult(call.tenantId(), call.executionId(), call.nodeId(), call.id(), data, success);
 		}
 		catch (FlowException e) {
 			// lost a race with a duplicate callback, or the execution expired/was cancelled before the answer arrived
-			var now = calls.findById(call.id()).orElse(call);
-			if (now.status() == ProviderCall.Status.COMPLETED) {
+			if (calls.findById(call.id()).orElse(call).status() == ProviderCall.Status.COMPLETED) {
+				return Outcome.DUPLICATE;
+			}
+			if (alreadyResumedBy(call)) {
+				calls.save(withStatus(call, ProviderCall.Status.COMPLETED));
 				return Outcome.DUPLICATE;
 			}
 			return expire(call);
 		}
+		storeInCache(call, execution.inputData(), Maps.of(node.get("config")), data);
 		calls.save(withStatus(call, ProviderCall.Status.COMPLETED));
 		log.info("provider call completed executionId={} callId={} providerKey={} status=COMPLETED", call.executionId(), call.id(),
 				call.providerKey());
 		return Outcome.ACCEPTED;
+	}
+
+	private boolean alreadyResumedBy(ProviderCall call) {
+		var ctx = executions.get(call.tenantId(), call.executionId()).contextData();
+		var output = ctx == null ? null : Maps.of(Maps.of(ctx.get("nodes")).get(call.nodeId()));
+		return output != null && call.id().toString().equals(output.get("callId"));
+	}
+
+	/** Best effort: the execution already moved on, so a cache problem must not undo or fail the completion. */
+	private void storeInCache(ProviderCall call, Map<String, Object> inputData, Map<String, Object> nodeConfig, Map<String, Object> data) {
+		try {
+			var query = ProviderBackedValidator.query(call.nodeId(), nodeConfig.get("query"), inputData);
+			cache.store(call.tenantId(), call.providerKey(), ProviderCache.OPERATION, query, data, clock.instant());
+		}
+		catch (RuntimeException e) {
+			log.warn("provider cache store skipped callId={} providerKey={} cause={}", call.id(), call.providerKey(), e.toString());
+		}
 	}
 
 	private Outcome expire(ProviderCall call) {

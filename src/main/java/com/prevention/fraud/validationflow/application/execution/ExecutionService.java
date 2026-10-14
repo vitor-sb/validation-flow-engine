@@ -195,6 +195,7 @@ public class ExecutionService {
 		Map<String, Object> node = Maps.of(Maps.of(waiting.snapshot().get("nodes")).get(nodeId));
 		Map<String, Object> out = new LinkedHashMap<>(data);
 		out.put("success", success);
+		out.put("callId", callId.toString()); // lets a retry recognise that this call already resumed the execution
 		return resumeAt(waiting, node, out, Map.of("callId", callId.toString(), "source", "PROVIDER"), null, true);
 	}
 
