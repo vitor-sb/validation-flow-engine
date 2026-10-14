@@ -23,6 +23,10 @@ public class FlowException extends RuntimeException {
 		return new FlowException(Kind.NOT_FOUND, "flow not found", List.of());
 	}
 
+	public static FlowException callNotFound() {
+		return new FlowException(Kind.NOT_FOUND, "provider call not found", List.of());
+	}
+
 	public static FlowException executionNotFound() {
 		return new FlowException(Kind.EXECUTION_NOT_FOUND, "execution not found", List.of());
 	}

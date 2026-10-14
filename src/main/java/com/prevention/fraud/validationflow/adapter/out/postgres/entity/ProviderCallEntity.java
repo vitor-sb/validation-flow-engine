@@ -50,4 +50,6 @@ public class ProviderCallEntity {
 	@Column(name = "updated_at")
 	public Instant updatedAt;
 
+	public String reason;
+
 }

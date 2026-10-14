@@ -105,7 +105,7 @@ public class ProviderCallbackService {
 	}
 
 	private Outcome expire(ProviderCall call) {
-		calls.save(withStatus(call, ProviderCall.Status.FAILED));
+		calls.save(call.withState(ProviderCall.Status.FAILED, call.attempts(), null, clock.instant(), "EXECUTION_ENDED"));
 		throw FlowException.conflict("call is no longer waiting");
 	}
 

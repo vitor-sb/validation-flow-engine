@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import com.prevention.fraud.validationflow.application.execution.ProviderCallAdminService;
 import com.prevention.fraud.validationflow.application.execution.ProviderCallbackService;
 import com.prevention.fraud.validationflow.application.execution.ProviderPollService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
@@ -23,10 +24,13 @@ class ProviderPollConfig {
 
 	private final ProviderPollService service;
 
+	private final ProviderCallAdminService admin;
+
 	ProviderPollConfig(ProviderCallRepository calls, ProviderConfigService configs, ObjectProvider<DataProvider> providers,
-			ProviderCallbackService completion, @Value("${app.providers.poll-interval:PT10S}") Duration interval,
+			ProviderCallbackService completion, ProviderCallAdminService admin, @Value("${app.providers.poll-interval:PT10S}") Duration interval,
 			@Value("${app.providers.poll-max-delay:PT5M}") Duration maxDelay,
 			@Value("${app.providers.max-attempts:5}") int maxAttempts) {
+		this.admin = admin;
 		this.service = new ProviderPollService(calls, configs,
 				providers.orderedStream().collect(Collectors.toMap(DataProvider::key, p -> p)), completion,
 				Clock.systemUTC(), interval, maxDelay, maxAttempts);
@@ -34,6 +38,8 @@ class ProviderPollConfig {
 
 	@Scheduled(fixedDelayString = "${app.providers.poll-interval:PT10S}")
 	void run() {
+		// first, so calls of ended executions are never polled
+		admin.sweep();
 		service.pollDue();
 	}
 

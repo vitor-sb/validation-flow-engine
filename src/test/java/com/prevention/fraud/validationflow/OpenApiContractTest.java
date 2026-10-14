@@ -48,7 +48,7 @@ class OpenApiContractTest {
 		var result = new OpenAPIV3Parser().readContents(generated, null, opts);
 		assertTrue(result.getMessages().isEmpty(), () -> "invalid OpenAPI: " + result.getMessages());
 		assertNotNull(result.getOpenAPI());
-		assertEquals(19, result.getOpenAPI().getPaths().values().stream().mapToInt(p -> p.readOperations().size()).sum());
+		assertEquals(21, result.getOpenAPI().getPaths().values().stream().mapToInt(p -> p.readOperations().size()).sum());
 	}
 
 }

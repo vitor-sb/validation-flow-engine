@@ -23,4 +23,14 @@ public interface ProviderCallRepository {
 	 */
 	List<ProviderCall> claimDuePolls(Instant now, Instant leaseUntil, int limit);
 
+	/**
+	 * Dead letter: moves FAILED calls, and PENDING calls whose execution is no longer WAITING (expired, cancelled, ended),
+	 * to DEAD with a reason, clearing {@code nextPollAt}. Returns how many rows changed.
+	 */
+	int sweepDead(Instant now);
+
+	List<ProviderCall> listByStatus(String tenantId, ProviderCall.Status status, int page, int size);
+
+	long countByStatus(String tenantId, ProviderCall.Status status);
+
 }

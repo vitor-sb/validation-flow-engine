@@ -16,6 +16,7 @@ import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
 import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
+import com.prevention.fraud.validationflow.application.execution.ProviderCallAdminService;
 import com.prevention.fraud.validationflow.application.execution.ProviderCallbackService;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
@@ -52,6 +53,11 @@ class FlowConfig {
 		return new ProviderCallbackService(calls, configs,
 				providers.orderedStream().collect(java.util.stream.Collectors.toMap(DataProvider::key, p -> p)),
 				credentials, executions, java.time.Clock.systemUTC());
+	}
+
+	@Bean
+	ProviderCallAdminService providerCallAdminService(ProviderCallRepository calls, ExecutionService executions) {
+		return new ProviderCallAdminService(calls, executions, java.time.Clock.systemUTC());
 	}
 
 	@Bean

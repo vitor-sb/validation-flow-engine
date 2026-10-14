@@ -43,6 +43,7 @@ class SecurityConfig {
 						.requestMatchers(HttpMethod.GET, "/api/v1/executions/**").hasAuthority("SCOPE_validation:read")
 						.requestMatchers(HttpMethod.GET, "/api/v1/providers").hasAuthority("SCOPE_provider:read")
 						.requestMatchers(HttpMethod.PUT, "/api/v1/providers/*").hasAuthority("SCOPE_provider:admin")
+						.requestMatchers("/api/v1/provider-calls/**").hasAuthority("SCOPE_provider:admin")
 						.anyRequest().authenticated())
 				.build();
 	}

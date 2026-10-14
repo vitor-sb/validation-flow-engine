@@ -56,7 +56,8 @@ public class ProviderPollService {
 		var provider = providers.get(call.providerKey());
 		if (config == null || provider == null || !call.deadline().isAfter(now)) {
 			// disabled provider counts as a non-retryable failure; past the deadline the wait expiry owns the execution
-			calls.save(call.withState(ProviderCall.Status.FAILED, call.attempts(), null, now));
+			calls.save(call.withState(ProviderCall.Status.FAILED, call.attempts(), null, now,
+					config == null || provider == null ? "PROVIDER_DISABLED" : "DEADLINE_PASSED"));
 			return;
 		}
 		// capped exponential backoff: wait twice as long as since the last attempt
@@ -75,7 +76,7 @@ public class ProviderPollService {
 			int attempts = call.attempts() + 1;
 			boolean giveUp = !e.retryable() || attempts > maxAttempts;
 			calls.save(call.withState(giveUp ? ProviderCall.Status.FAILED : ProviderCall.Status.PENDING, attempts,
-					giveUp ? null : now.plus(delay), now));
+					giveUp ? null : now.plus(delay), now, giveUp ? (e.retryable() ? "RETRIES_EXHAUSTED" : "NON_RETRYABLE") : null));
 		}
 		catch (FlowException e) {
 			// complete() already marked the call FAILED: the execution expired, was cancelled or moved on

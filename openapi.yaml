@@ -521,7 +521,7 @@ paths:
   /api/v1/node-types:
     get:
       description: All validator types registered in this deployment.
-      operationId: list_3
+      operationId: list_4
       responses:
         "200":
           content:
@@ -626,6 +626,85 @@ paths:
       summary: Deliver the result of a pending provider call
       tags:
       - Provider Callbacks
+  /api/v1/provider-calls:
+    get:
+      description: "Tenant's calls, newest first, paginated (`size` 1..100). Use `status=DEAD`\
+        \ for the dead letter."
+      operationId: list_3
+      parameters:
+      - in: query
+        name: status
+        required: true
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - COMPLETED
+          - FAILED
+          - DEAD
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+          minimum: 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+          maximum: 100
+          minimum: 1
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - provider:admin
+      summary: List provider calls by status
+      tags:
+      - Provider Calls
+  /api/v1/provider-calls/{id}/retry:
+    post:
+      description: Puts a DEAD call back in PENDING with `attempts` reset. 409 unless
+        the call is DEAD and its execution is still WAITING at that node.
+      operationId: retry
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+      security:
+      - apiKey:
+        - provider:admin
+      summary: Retry a dead provider call
+      tags:
+      - Provider Calls
   /api/v1/providers:
     get:
       description: Tenant's rows only. Credentials appear as references.

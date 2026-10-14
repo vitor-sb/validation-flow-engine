@@ -11,7 +11,14 @@ import java.util.UUID;
 /** A provider call waiting for an answer. Only the hash of the callback token is kept. */
 public record ProviderCall(UUID id, String tenantId, UUID executionId, String nodeId, String providerKey,
 		String externalRef, ProviderResult.Mode mode, Status status, int attempts, Instant nextPollAt, Instant deadline,
-		String callbackTokenHash, Instant createdAt, Instant updatedAt) {
+		String callbackTokenHash, Instant createdAt, Instant updatedAt, String reason) {
+
+	public ProviderCall(UUID id, String tenantId, UUID executionId, String nodeId, String providerKey, String externalRef,
+			ProviderResult.Mode mode, Status status, int attempts, Instant nextPollAt, Instant deadline,
+			String callbackTokenHash, Instant createdAt, Instant updatedAt) {
+		this(id, tenantId, executionId, nodeId, providerKey, externalRef, mode, status, attempts, nextPollAt, deadline,
+				callbackTokenHash, createdAt, updatedAt, null);
+	}
 
 	public enum Status {
 		PENDING, COMPLETED, FAILED, DEAD
@@ -20,8 +27,13 @@ public record ProviderCall(UUID id, String tenantId, UUID executionId, String no
 	private static final SecureRandom RANDOM = new SecureRandom();
 
 	public ProviderCall withState(Status status, int attempts, Instant nextPollAt, Instant now) {
+		return withState(status, attempts, nextPollAt, now, null);
+	}
+
+	/** {@code reason} says why the call is FAILED or DEAD; null for the other states. */
+	public ProviderCall withState(Status status, int attempts, Instant nextPollAt, Instant now, String reason) {
 		return new ProviderCall(id, tenantId, executionId, nodeId, providerKey, externalRef, mode, status, attempts,
-				nextPollAt, deadline, callbackTokenHash, createdAt, now);
+				nextPollAt, deadline, callbackTokenHash, createdAt, now, reason);
 	}
 
 	/** A new random token; the caller hands it to the provider and must not persist it. */

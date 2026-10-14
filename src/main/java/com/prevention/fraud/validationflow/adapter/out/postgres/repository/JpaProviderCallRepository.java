@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,23 @@ public class JpaProviderCallRepository implements ProviderCallRepository {
 		var rows = calls.lockDue(now, limit);
 		rows.forEach(r -> r.nextPollAt = leaseUntil);
 		return rows.stream().map(ProviderCallMapper::toDomain).toList();
+	}
+
+	@Override
+	@Transactional
+	public int sweepDead(Instant now) {
+		return calls.sweepDead(now);
+	}
+
+	@Override
+	public List<ProviderCall> listByStatus(String tenantId, ProviderCall.Status status, int page, int size) {
+		return calls.findByTenantIdAndStatusOrderByUpdatedAtDesc(tenantId, status.name(), PageRequest.of(page, size))
+			.stream().map(ProviderCallMapper::toDomain).toList();
+	}
+
+	@Override
+	public long countByStatus(String tenantId, ProviderCall.Status status) {
+		return calls.countByTenantIdAndStatus(tenantId, status.name());
 	}
 
 	@Override
