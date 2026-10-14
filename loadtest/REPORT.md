@@ -41,5 +41,13 @@ Same machine, scenario and `loadtest/run.sh`; run 2026-10-13 (two full runs, plu
 | 32 | 497.8 | -20.9% | 507.8 | 56.5  | 102.0 | 133.0 | 0 |
 | 64 | 634.5 | +0.3%  | 617.9 | 103.9 | 114.5 | 127.7 | 0 |
 
-**Finding: the 10% threshold is exceeded at 8 and 32 clients, reproducibly (3 runs).** At 64 clients (saturated) throughput is unchanged. The level-8 drop is already present at the commit before US-013 (374.3 req/s), so it comes from the earlier stories of this branch, not from the new metrics. Per execution the SQL is the same 9 statements as the baseline (no new query on the execute path).
-Odd signal: Postgres `blks_hit` for the first two levels is ~100x the baseline (157M vs 1.8M) and returns to normal in the third level; `flow_execution` heap hits dominate, with no seq scans and normal pkey plans. Not ruled out: V5 partial index (dropping it did not help), unscheduled jobs (none are tight loops). Not root-caused; bisect the stories (US-004..US-012) with `loadtest/run.sh 8` before tuning.
+**Correction (bisect, same day): the drop above does not reproduce.** The runs above were taken while the Ralph loop was still running on the same machine (its `claude` and `mvn verify` processes compete for the 12 CPUs), so they are contaminated. Re-run with nothing else going on, one worktree per commit, `loadtest/run.sh <level>`:
+
+| commit | 8 clients (req/s) | 32 clients (req/s) |
+|---|---|---|
+| `9b331c2` (before this branch) | 608.0 | 716.5 |
+| `ed38d65` (US-013) | 606.3 / 591.8 | 679.1 |
+
+That is -0.3% to -2.7% at 8 clients and -5.2% at 32, inside the 10% threshold and the run-to-run noise noted above. No bisect of US-004..US-012 is needed. p95 at 8 clients: 19.6 ms vs 18.6 / 19.4 ms.
+
+One real difference remains: Postgres `blks_hit` per execution is higher on this branch (about 3.3k vs 1.9k at 8 clients, +70%; +29% at 32), with no throughput cost today. Worth a look if the DB ever becomes the bottleneck (candidates: the new `flow_execution` columns/partial index from V5, `provider_config` lookups). Not investigated.
