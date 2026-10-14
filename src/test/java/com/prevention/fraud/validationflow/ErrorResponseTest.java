@@ -47,6 +47,9 @@ class ErrorResponseTest {
 	@org.springframework.test.context.bean.override.mockito.MockitoBean
 	com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository providerConfigRepository;
 
+	@org.springframework.test.context.bean.override.mockito.MockitoBean
+	com.prevention.fraud.validationflow.application.provider.ProviderCallRepository providerCallRepository;
+
 	private static void assertErrorResponse(ResultActions r, int status, String code) throws Exception {
 		r.andExpect(status().is(status)).andExpect(jsonPath("$.code").value(code))
 				.andExpect(jsonPath("$.retryable").isBoolean()).andExpect(jsonPath("$.details").isArray())
