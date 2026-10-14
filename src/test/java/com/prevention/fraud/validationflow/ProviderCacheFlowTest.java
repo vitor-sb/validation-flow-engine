@@ -22,6 +22,7 @@ import com.prevention.fraud.validationflow.application.provider.ProviderCache;
 import com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfig;
+import com.prevention.fraud.validationflow.application.provider.ProviderException;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ProviderBackedValidator;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy.ValidationInput;
@@ -32,6 +33,8 @@ import com.prevention.fraud.validationflow.application.validator.ValidatorStrate
 class ProviderCacheFlowTest {
 
 	static final AtomicInteger FETCHES = new AtomicInteger();
+
+	static volatile boolean DOWN, DOWN_RETRYABLE;
 
 	@TestConfiguration(proxyBeanMethods = false)
 	static class Fake {
@@ -44,6 +47,9 @@ class ProviderCacheFlowTest {
 
 				public Map<String, Object> fetch(ProviderConfig c, Map<String, Object> p) {
 					FETCHES.incrementAndGet();
+					if (DOWN) {
+						throw new ProviderException("UPSTREAM_DOWN", "provider unavailable", DOWN_RETRYABLE);
+					}
 					return Map.of("active", true);
 				}
 			};
@@ -69,11 +75,23 @@ class ProviderCacheFlowTest {
 	List<DataProvider> providers;
 
 	private void enable(String tenant, boolean withPolicy) {
+		enable(tenant, withPolicy, false);
+	}
+
+	private void enable(String tenant, boolean withPolicy, boolean fallback) {
 		configs.save(new ProviderConfig(tenant, "fake-cache", true, null, null, null, null, null, "t", null));
 		if (withPolicy) {
 			repo.savePolicy(new ProviderCachePolicy(tenant, "fake-cache", ProviderCache.OPERATION, "LOW_VOLATILITY", 3600,
-					false, null, null, null), "t");
+					fallback, null, null, null), "t");
 		}
+	}
+
+	/** Expired entry for doc "d1" (the key `run` queries), then the provider goes down. */
+	private void expireThenBreak(String tenant, boolean retryable) {
+		cache.store(tenant, "fake-cache", ProviderCache.OPERATION, Map.of("id", "d1"), Map.of("active", true),
+				Instant.now().minusSeconds(7200));
+		DOWN = true;
+		DOWN_RETRYABLE = retryable;
 	}
 
 	private String run(String tenant, String doc, String cacheMode) {
@@ -89,7 +107,8 @@ class ProviderCacheFlowTest {
 		String ctx = "C-" + tenant + "-" + cacheMode;
 		var d = flows.createDraft(tenant, "t", new FlowService.CreateFlow("k-" + ctx + System.nanoTime(), "CF", ctx, "d", null, g, List.of(), null));
 		flows.activate(tenant, d.id());
-		return String.valueOf(executions.execute(tenant, null, "CF", ctx, Map.of("doc", doc), null).result().get("nodes"));
+		var result = executions.execute(tenant, null, "CF", ctx, Map.of("doc", doc), null).result();
+		return result == null ? "FAILED" : String.valueOf(result.get("nodes"));
 	}
 
 	private static String status(String nodes) {
@@ -145,6 +164,45 @@ class ProviderCacheFlowTest {
 		assertEquals("EXPIRED", v.execute(in).output().get("cacheStatus"));
 		assertEquals(base + 2, FETCHES.get());
 		assertEquals("HIT", v.execute(in).output().get("cacheStatus"));
+	}
+
+	@Test
+	void externalCallServesStaleOnlyWhenPolicyAllowsAndErrorIsRetryable() {
+		enable("cache-f", true, true);
+		enable("cache-g", true, false);
+		enable("cache-h", true, true);
+		try {
+			expireThenBreak("cache-f", true);
+			String stale = run("cache-f", "d1", null);
+			assertEquals("STALE_FALLBACK", status(stale));
+			assertTrue(stale.contains("fallbackReason=UPSTREAM_DOWN") && stale.contains("cacheAgeSeconds="), stale);
+			expireThenBreak("cache-g", true);
+			assertEquals("FAILED", run("cache-g", "d1", null)); // no permission: plain failure
+			expireThenBreak("cache-h", false);
+			assertEquals("FAILED", run("cache-h", "d1", null)); // not retryable: no fallback
+		}
+		finally {
+			DOWN = false;
+		}
+	}
+
+	@Test
+	void validatorFallsBackOnlyAfterRetriesAreExhausted() {
+		enable("cache-i", true, true);
+		var provider = providers.stream().filter(p -> p.key().equals("fake-cache")).findFirst().orElseThrow();
+		var v = new ProviderBackedValidator("v", provider, configs, cache);
+		var in = new ValidationInput(Map.of("inputData", Map.of("doc", "d1")),
+				Map.of("params", Map.of("query", Map.of("id", "doc"))), "cache-i");
+		try {
+			expireThenBreak("cache-i", true);
+			var out = v.fallback(in, "UPSTREAM_DOWN").orElseThrow().output();
+			assertEquals("STALE_FALLBACK", out.get("cacheStatus"));
+			assertEquals("UPSTREAM_DOWN", out.get("fallbackReason"));
+			assertTrue(v.fallback(new ValidationInput(in.data(), in.config(), "cache-other"), "X").isEmpty());
+		}
+		finally {
+			DOWN = false;
+		}
 	}
 
 }

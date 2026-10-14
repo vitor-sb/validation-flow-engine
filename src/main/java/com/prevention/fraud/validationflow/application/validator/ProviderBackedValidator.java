@@ -7,6 +7,7 @@ import com.prevention.fraud.validationflow.application.provider.ProviderExceptio
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -73,6 +74,21 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		}
 		boolean ok = matches(params.get("expect"), data);
 		return new ValidationResult(ok, lookup == null ? data : lookup.tag(data, policy, now));
+	}
+
+	@Override
+	public Optional<ValidationResult> fallback(ValidationInput input, String errorCode) {
+		if (cache == null) {
+			return Optional.empty();
+		}
+		Map<String, Object> params = asMap(input.config().get("params"));
+		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
+		return cache.staleFallback(input.tenantId(), provider.key(), ProviderCache.OPERATION, query).map(l -> {
+			Map<String, Object> data = l.entry().response();
+			Map<String, Object> out = new LinkedHashMap<>(l.tag(data, null, Instant.now()));
+			out.put("fallbackReason", errorCode);
+			return new ValidationResult(matches(params.get("expect"), data), out);
+		});
 	}
 
 	@Override

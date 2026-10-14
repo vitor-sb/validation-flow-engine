@@ -44,4 +44,9 @@ public interface ValidatorStrategy {
 		return Set.of();
 	}
 
+	/** Last resort once a retryable failure exhausted its attempts: a result to use instead, or empty to fail. */
+	default java.util.Optional<ValidationResult> fallback(ValidationInput input, String errorCode) {
+		return java.util.Optional.empty();
+	}
+
 }

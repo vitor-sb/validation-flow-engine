@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** The built-in handlers for START, DECISION, VALIDATION, SUB_FLOW and END. */
@@ -80,6 +81,19 @@ public final class NodeHandlers {
 			}
 			var a = runner.run(s.ex().tenantId(), s.nodeId(), v, s.ctx(), s.config(), (att, st, out, err, t) -> s.host().recorder()
 					.recordNode(s.ex(), s.nodeId(), s.type(), att, st, out, err, s.ctx(), t));
+			if (a.error() != null && Boolean.TRUE.equals(a.error().get("retryable"))) {
+				// retries exhausted: a policy-approved stale answer replaces the failure, flagged in the output
+				var stale = v.fallback(new ValidatorStrategy.ValidationInput(Map.copyOf(s.ctx()), s.config().raw(),
+						s.ex().tenantId()), (String) a.error().get("code"));
+				if (stale.isPresent()) {
+					Map<String, Object> out = new LinkedHashMap<>(stale.get().output());
+					out.put("success", stale.get().success());
+					s.outputs().put(s.nodeId(), out);
+					s.host().recorder().recordNode(s.ex(), s.nodeId(), s.type(), a.attempts() + 1, "COMPLETED", out, null,
+							s.ctx(), Instant.now());
+					return null;
+				}
+			}
 			if (a.error() != null) {
 				return s.host().save(s.ex().fail(s.ctx(), (String) a.error().get("code"),
 						(String) a.error().get("message"), (Boolean) a.error().get("retryable"),
@@ -173,7 +187,7 @@ public final class NodeHandlers {
 				return fail(s, e.code(), e.getMessage(), e.retryable());
 			}
 			if (lookup.hit()) {
-				return done(s, raw, lookup.entry().response(), lookup, null, now);
+				return done(s, raw, lookup.entry().response(), lookup, null, now, null);
 			}
 			// the clear token goes to the provider only; the row keeps its hash
 			var callback = new CallbackHandle(UUID.randomUUID(), ProviderCall.newToken());
@@ -181,11 +195,15 @@ public final class NodeHandlers {
 				r = provider.start(config, query, callback);
 			}
 			catch (ProviderException e) {
-				return fail(s, e.code(), e.getMessage(), e.retryable());
+				var stale = e.retryable() ? cache.staleFallback(s.ex().tenantId(), key, ProviderCache.OPERATION, query) : Optional.<ProviderCache.Lookup>empty();
+				if (stale.isEmpty()) {
+					return fail(s, e.code(), e.getMessage(), e.retryable());
+				}
+				return done(s, raw, stale.get().entry().response(), stale.get(), null, now, e.code());
 			}
 			if (r instanceof ProviderResult.Done d) {
 				String policy = cache.store(s.ex().tenantId(), key, ProviderCache.OPERATION, query, d.data(), now);
-				return done(s, raw, d.data(), lookup, policy, now);
+				return done(s, raw, d.data(), lookup, policy, now, null);
 			}
 			var p = (ProviderResult.Pending) r;
 			Instant deadline = now.plus(Duration.parse((String) raw.get("maxWait")));
@@ -198,9 +216,12 @@ public final class NodeHandlers {
 		}
 
 		private static FlowExecution done(NodeStep s, Map<String, Object> raw, Map<String, Object> data,
-				ProviderCache.Lookup lookup, String policy, Instant now) {
+				ProviderCache.Lookup lookup, String policy, Instant now, String fallbackReason) {
 			Map<String, Object> out = new LinkedHashMap<>(lookup.tag(data, policy, now));
 			out.put("success", ProviderBackedValidator.matches(raw.get("expect"), data));
+			if (fallbackReason != null) {
+				out.put("fallbackReason", fallbackReason);
+			}
 			s.outputs().put(s.nodeId(), out);
 			complete(s, out, now);
 			return null;

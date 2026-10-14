@@ -14,7 +14,8 @@ public class ProviderCache {
 	/** Nodes have no operation concept yet: every cached call is the provider's single "default" operation. */
 	public static final String OPERATION = "default";
 
-	public static final String HIT = "HIT", MISS = "MISS", EXPIRED = "EXPIRED", BYPASS = "BYPASS", DISABLED = "DISABLED";
+	public static final String HIT = "HIT", MISS = "MISS", EXPIRED = "EXPIRED", BYPASS = "BYPASS", DISABLED = "DISABLED",
+			STALE_FALLBACK = "STALE_FALLBACK";
 
 	/** Outcome of a lookup: {@code entry} is set only for HIT and EXPIRED. */
 	public record Lookup(String status, ProviderCacheEntry entry) {
@@ -71,6 +72,17 @@ public class ProviderCache {
 			return new Lookup(MISS, null);
 		}
 		return new Lookup(entry.get().validUntil().isAfter(now) ? HIT : EXPIRED, entry.get());
+	}
+
+	/**
+	 * The stored answer to serve, flagged STALE_FALLBACK, when the provider failed for good: only if a policy allows
+	 * {@code fallbackOnErrorAllowed} and an entry (valid or expired) exists. The caller must record the failure reason.
+	 */
+	public Optional<Lookup> staleFallback(String tenantId, String providerKey, String operation, Map<String, ?> params) {
+		if (!policies.resolve(tenantId, providerKey, operation).filter(ProviderCachePolicy::fallbackOnErrorAllowed).isPresent()) {
+			return Optional.empty();
+		}
+		return find(tenantId, providerKey, operation, params).map(e -> new Lookup(STALE_FALLBACK, e));
 	}
 
 	/**
