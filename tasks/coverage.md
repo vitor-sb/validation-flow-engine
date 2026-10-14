@@ -16,6 +16,21 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 - `SUB_FLOW` com filho em espera: o pai fica `WAITING` (`SUB_FLOW_WAITING`); decidir no filho continua o pai. Cancelar ou expirar um lado cancela/expira o outro em cascata (`CHILD_CANCELLED`, `PARENT_CANCELLED`, `WAIT_EXPIRED`), auditado nos dois; a recuperação de um filho abandonado cancela o pai (`CHILD_ABANDONED`). Os contadores contam cada execução afetada.
 - Testes: `ExecutionTest` (resume, cancel, expiração, métricas).
 
+### RF-07 (execução assíncrona) e RF-13 (cache de respostas): PARCIAL
+Entregue (`prd-provedores-async-e-cache.md`, US-001..US-012 e ajustes posteriores):
+- Node `EXTERNAL_CALL`, contrato `DataProvider.start/poll/normalizeCallback`, tabela `provider_call` (com FK para `flow_execution`), callback autenticado por token (HMAC opcional), polling com backoff e `SKIP LOCKED`, dead-letter (`DEAD`) e reprocessamento (`POST /provider-calls/{id}/retry`).
+- Cache: `provider_cache_entry` e `provider_cache_policy`, TTL por categoria com teto `cache-max-ttl`, `REAL_TIME` sem cache, `BYPASS`, cache de `found:false` com TTL curto, fallback para dado vencido somente com permissão da política e registrado no resultado, limpeza por `valid_until`, métricas `validation.provider.*`.
+- Callback e polling também gravam no cache; uma conclusão repetida após queda entre retomar e marcar `COMPLETED` termina sem 409.
+- Índices: parcial por `status <> 'COMPLETED'` (sweep e gauges) e `(execution_id)` (FK).
+
+Lacunas conhecidas:
+- **Sem adapter assíncrono real:** só a BrasilAPI (síncrona) existe; callback, polling e dead-letter foram testados com provedores falsos.
+- **Operação fixa `default`** e chave de cache com todos os parâmetros, sem normalização (CNPJ formatado e só dígitos geram entradas diferentes): `prd-cache-operacao-e-chave.md`.
+- `cache` no nó aceita qualquer valor (só `"BYPASS"` tem efeito); falha de polling não faz fallback para dado vencido.
+- Callback que chega depois do sweep de dead-letter (chamada já `DEAD`) recebe 409.
+- RF-13 não coberto: política versionada, `sensitivity` (criptografia/retenção por política), invalidação por evento, TTL por produto/canal/tipo de usuário, aprovação de `CUSTOM`, camada Redis.
+- Teste de carga: rodar fora de `/workspace` (ver `loadtest/REPORT.md`).
+
 ## Critérios do v0.1 (seção 15)
 
 | # | Critério | Status |
