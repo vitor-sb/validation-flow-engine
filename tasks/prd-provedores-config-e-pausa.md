@@ -160,6 +160,42 @@ Este PRD faz duas coisas: (A) move a configuração de provedores para uma tabel
 - [ ] Logs continuam sem segredo nem dado pessoal
 - [ ] `tasks/coverage.md`: RF-08 e RF-12 saem de "Adiado"; `README.md` atualizado (nodes, escopos, provedores no banco)
 
+### Parte C: pausa dentro de SUB_FLOW
+
+> Acrescentada depois do ciclo inicial: o filho pausado era reportado como `SUB_FLOW_FAILED`. O pai e o filho devem ficar os dois em espera.
+
+### US-014: Filho pausado deixa o pai em espera
+**Descrição:** Como analista, quero que um sub-flow com `HUMAN_APPROVAL` pause também o fluxo pai, sem falhar.
+
+**Critérios:**
+- [ ] Quando o filho termina `WAITING`, o pai vai para `WAITING` no node `SUB_FLOW` (`waiting_node_id` = esse node, motivo `SUB_FLOW_WAITING`), sem `SUB_FLOW_FAILED`
+- [ ] O prazo do pai é o menor entre o do filho e o do próprio pai; a ligação pai/filho usa `parent_execution_id` e `parent_node_id` já existentes
+- [ ] O histórico do node `SUB_FLOW` fica como pendente, com o id da execução filha
+- [ ] Funciona em vários níveis (neto pausado deixa filho e pai em espera), respeitando o limite de profundidade existente
+- [ ] `POST /executions` do pai responde `202`
+- [ ] Teste: pai com `SUB_FLOW` cujo filho tem `HUMAN_APPROVAL` termina em `WAITING`, pai e filho
+
+### US-015: Retomar o filho continua o pai
+**Descrição:** Como aprovador, quero decidir no filho e ver o fluxo pai seguir sozinho.
+
+**Critérios:**
+- [ ] `POST /executions/{id}/resume` aceita o id do **filho**; ao terminar o filho, o pai retoma do node `SUB_FLOW` com o mapeamento de saída e segue as transições normais
+- [ ] Filho que ainda termina em `WAITING` (novo `HUMAN_APPROVAL` no mesmo filho) mantém o pai em espera
+- [ ] Filho que termina `FAILED` ou `TIMED_OUT` segue o tratamento atual de falha de sub-flow no pai
+- [ ] `resume` com o id do **pai** em espera por filho retorna 409 informando o id do filho a retomar
+- [ ] A retomada em cadeia usa o lock otimista nos dois níveis; duas retomadas concorrentes: uma vence
+- [ ] Teste de ponta a ponta: aprovar o filho leva pai e filho a `COMPLETED`; rejeitar segue o ramo `REJECTED` do filho
+
+### US-016: Cancelar e expirar em cascata
+**Descrição:** Como operador, quero que cancelar ou expirar um lado não deixe o outro órfão.
+
+**Critérios:**
+- [ ] Cancelar o pai em espera cancela os filhos em espera; cancelar o filho cancela o pai (motivo `CHILD_CANCELLED`)
+- [ ] A expiração do pai ou do filho expira o outro (`WAIT_EXPIRED`), com auditoria nos dois
+- [ ] Execução já finalizada não é alterada; o lock otimista decide corridas
+- [ ] `RecoveryService` e o job de expiração não geram pai `WAITING` sem filho `WAITING` (teste de consistência)
+- [ ] `tasks/coverage.md` e `README.md` descrevem o comportamento; métricas `resumed|cancelled|wait_expired` contam cada execução afetada
+
 ## 5. Requisitos funcionais
 
 - FR-1: Provedor sem linha em `provider_config` para o tenant é tratado como desligado.
@@ -169,6 +205,7 @@ Este PRD faz duas coisas: (A) move a configuração de provedores para uma tabel
 - FR-5: Uma execução pode estar em `WAITING` por no máximo `app.limits.max-wait`.
 - FR-6: Retomar exige escopo próprio e usa o snapshot da execução, não a definição atual do fluxo.
 - FR-7: Retomar, cancelar e expirar competem pelo mesmo lock otimista; exatamente um resultado vence.
+- FR-8: Um filho de `SUB_FLOW` em `WAITING` mantém o pai em `WAITING`; retomar, cancelar ou expirar um lado propaga ao outro.
 
 ## 6. Não-objetivos
 
