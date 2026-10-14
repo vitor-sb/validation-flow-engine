@@ -18,4 +18,14 @@ public interface DataProvider {
 	/** {@code config} is the tenant's enabled row for this provider; null columns mean the adapter's defaults. */
 	Map<String, Object> fetch(ProviderConfig config, Map<String, Object> params);
 
+	/** Starts a call. Sync providers keep the default; async ones return {@link ProviderResult.Pending}. */
+	default ProviderResult start(ProviderConfig config, Map<String, Object> params) {
+		return new ProviderResult.Done(fetch(config, params));
+	}
+
+	/** Checks a pending call. Only async providers implement it. */
+	default ProviderResult poll(ProviderConfig config, String externalRef) {
+		throw new UnsupportedOperationException(key() + " is not asynchronous");
+	}
+
 }
