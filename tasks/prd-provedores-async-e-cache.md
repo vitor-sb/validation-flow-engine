@@ -1,6 +1,6 @@
 # PRD: Provedores assíncronos (callback e polling) + cache de respostas (parte 2 de 2)
 
-> Depende de `prd-provedores-config-e-pausa.md` concluído: usa `provider_config`, o estado `WAITING`, `resume` e a expiração.
+> Depende de `prd-provedores-config-e-pausa.md`, **já concluído e mergeado**: usa `provider_config` (`ProviderConfigService`), o estado `WAITING` (`NodeStep.pause`), `ExecutionService.resume/cancel`, a expiração (`WaitExpiryService`) e a pausa em cascata de `SUB_FLOW`.
 > Referências no v0.1: RF-07 (execução assíncrona), RF-13 (cache de respostas de provedores), seções 7.2 (módulo 6), 8.6 (`provider_cache_entry`) e 10.7.
 
 ## 1. Introdução
@@ -37,8 +37,8 @@ Este PRD entrega: (A) chamadas assíncronas com callback, polling e dead-letter,
 **Descrição:** Como desenvolvedor de adapter, quero declarar que um provedor responde de forma assíncrona.
 
 **Critérios:**
-- [ ] `DataProvider` ganha `start(params)` que devolve `ProviderResult`: `Done(data)` ou `Pending(externalRef, mode, pollAfter)` com `mode` = `CALLBACK` ou `POLL`
-- [ ] Provedor assíncrono implementa também `poll(externalRef)` que devolve `ProviderResult`
+- [ ] `DataProvider` ganha `start(config, params)` que devolve `ProviderResult`: `Done(data)` ou `Pending(externalRef, mode, pollAfter)` com `mode` = `CALLBACK` ou `POLL` (o `ProviderConfig` do tenant é passado, como já ocorre em `fetch(config, params)`)
+- [ ] Provedor assíncrono implementa também `poll(config, externalRef)` que devolve `ProviderResult`
 - [ ] O comportamento síncrono atual (`fetch`) continua válido: `start` tem implementação padrão que chama `fetch` e devolve `Done`
 - [ ] `ProviderException` continua sendo o único canal de falha, com `retryable`
 - [ ] Teste de contrato para um provedor falso nos três caminhos
@@ -58,7 +58,8 @@ Este PRD entrega: (A) chamadas assíncronas com callback, polling e dead-letter,
 **Critérios:**
 - [ ] Novo node type `EXTERNAL_CALL`, config: `providerKey`, `query` (parâmetro do provedor → campo de `inputData`), `expect` (opcional), `maxWait` (duração, limitada por `app.limits.max-wait`)
 - [ ] Reaproveita a resolução de config do PRD anterior (`PROVIDER_DISABLED` quando desligado) e a mesma regra de `query`/`expect` do `ProviderBackedValidator`
-- [ ] `Done` segue o fluxo normal; `Pending` cria a `provider_call`, pausa a execução em `WAITING` (motivo `PROVIDER_PENDING`) com prazo igual a `maxWait`
+- [ ] `Done` segue o fluxo normal, com a mesma semântica de transições de saída de um node `VALIDATION` (resultado ok ou não ok); `Pending` cria a `provider_call` e pausa com `NodeStep.pause(...)` em `WAITING` (motivo `PROVIDER_PENDING`) com prazo igual a `maxWait`
+- [ ] Dentro de um `SUB_FLOW`, a pausa propaga ao pai pelo mecanismo já existente (nenhuma lógica nova de cascata)
 - [ ] A validação estrutural do grafo exige `maxWait` e as transições de sucesso e de falha
 - [ ] Aparece em `GET /api/v1/node-types`; a ativação rejeita provedor desligado (mesma regra do PRD anterior)
 
@@ -70,7 +71,7 @@ Este PRD entrega: (A) chamadas assíncronas com callback, polling e dead-letter,
 - [ ] Opcionalmente valida assinatura HMAC do corpo quando `provider_config` tiver `callback_secret_ref`
 - [ ] O adapter do provedor normaliza o corpo recebido para o mesmo formato canônico do `fetch`
 - [ ] Chamada só aceita em `PENDING`; repetição do mesmo callback é idempotente (200 sem efeito), chamada já `DEAD` ou `FAILED` retorna 409
-- [ ] Callback válido grava o resultado no histórico do node e retoma a execução pelo mesmo caminho do `resume` do PRD anterior
+- [ ] Callback válido grava o resultado no histórico do node e retoma a execução a partir do node em espera, reaproveitando a continuação de `ExecutionService.resume` (que aceita um node inicial); a transição seguida é a do resultado do provedor, não a de `APPROVED|REJECTED`
 - [ ] Corpo limitado por `app.limits.max-body-bytes`; token inválido retorna 401 sem revelar se a chamada existe
 - [ ] Teste: callback correto, token errado, duplicado e fora de ordem com expiração
 
