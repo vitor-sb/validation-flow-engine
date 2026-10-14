@@ -27,7 +27,7 @@ public interface ProviderCallJpaRepository extends JpaRepository<ProviderCallEnt
 			+ "WHEN c.status = 'FAILED' AND c.reason IS NOT NULL THEN c.reason "
 			+ "WHEN c.status = 'FAILED' THEN 'FAILED' ELSE 'EXECUTION_ENDED' END "
 			+ "FROM flow_execution e WHERE e.tenant_id = c.tenant_id AND e.id = c.execution_id "
-			+ "AND (c.status = 'FAILED' OR (c.status = 'PENDING' AND e.status <> 'WAITING'))", nativeQuery = true)
+			+ "AND c.status IN ('FAILED', 'PENDING') AND (c.status = 'FAILED' OR (c.status = 'PENDING' AND e.status <> 'WAITING'))", nativeQuery = true)
 	int sweepDead(@Param("now") Instant now);
 
 	List<ProviderCallEntity> findByTenantIdAndStatusOrderByUpdatedAtDesc(String tenantId, String status, Pageable page);
