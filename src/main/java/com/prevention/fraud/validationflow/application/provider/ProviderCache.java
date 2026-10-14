@@ -10,9 +10,11 @@ import com.prevention.fraud.validationflow.application.shared.CanonicalHash;
 public class ProviderCache {
 
 	private final ProviderCacheRepository repository;
+	private final CachePolicyService policies;
 
-	public ProviderCache(ProviderCacheRepository repository) {
+	public ProviderCache(ProviderCacheRepository repository, CachePolicyService policies) {
 		this.repository = repository;
+		this.policies = policies;
 	}
 
 	/** Hash of the canonical parameters; the clear values are never stored. */
@@ -25,11 +27,11 @@ public class ProviderCache {
 		return repository.findEntry(tenantId, providerKey, operation, requestKey(params));
 	}
 
-	/** Stores the response only when the tenant has a policy for (provider, operation); returns whether it did. */
+	/** Stores the response only when a cacheable policy applies to (tenant, provider, operation); returns whether it did. */
 	public boolean store(String tenantId, String providerKey, String operation, Map<String, ?> params,
 			Map<String, Object> response, Instant now) {
-		var policy = repository.findPolicy(tenantId, providerKey, operation);
-		if (policy.isEmpty() || policy.get().ttlSeconds() == null) {
+		var policy = policies.resolve(tenantId, providerKey, operation);
+		if (policy.isEmpty()) {
 			return false;
 		}
 		var p = policy.get();

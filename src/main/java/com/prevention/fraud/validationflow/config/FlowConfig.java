@@ -13,7 +13,9 @@ import com.prevention.fraud.validationflow.application.flow.ports.FlowRepository
 import com.prevention.fraud.validationflow.application.execution.node.NodeHandlers;
 import com.prevention.fraud.validationflow.application.execution.node.SubFlowRunner;
 import com.prevention.fraud.validationflow.application.flow.FlowService;
+import com.prevention.fraud.validationflow.application.provider.CachePolicyService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderCall;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderMetrics;
@@ -47,6 +49,16 @@ class FlowConfig {
 		var handlers = new java.util.ArrayList<>(NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)));
 		handlers.add(new NodeHandlers.ExternalCall(byKey, providerConfigs, calls));
 		return new ExecutionService(flows, repository, handlers, runner.metrics());
+	}
+
+	@Bean
+	CachePolicyService cachePolicyService(ProviderCacheRepository repository,
+			@org.springframework.beans.factory.annotation.Value("${app.providers.cache-ttl.low-volatility:P1D}") java.time.Duration low,
+			@org.springframework.beans.factory.annotation.Value("${app.providers.cache-ttl.medium-volatility:PT1H}") java.time.Duration medium,
+			@org.springframework.beans.factory.annotation.Value("${app.providers.cache-ttl.high-volatility:PT5M}") java.time.Duration high,
+			@org.springframework.beans.factory.annotation.Value("${app.providers.cache-max-ttl:P7D}") java.time.Duration maxTtl) {
+		return new CachePolicyService(repository, java.util.Map.of(CachePolicyService.LOW, low,
+				CachePolicyService.MEDIUM, medium, CachePolicyService.HIGH, high), maxTtl);
 	}
 
 	@Bean

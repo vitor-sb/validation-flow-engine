@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import com.prevention.fraud.validationflow.application.provider.CachePolicyService;
 import com.prevention.fraud.validationflow.application.provider.ProviderCache;
 import com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy;
 import com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository;
@@ -29,7 +31,7 @@ class ProviderCacheRepositoryTest {
 	void storesOnlyWithPolicyAndIsolatesTenantAndProvider() {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
-		var cache = new ProviderCache(repo);
+		var cache = new ProviderCache(repo, new CachePolicyService(repo, Map.of("LOW_VOLATILITY", Duration.ofDays(1)), Duration.ofDays(7)));
 		var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 		var params = Map.<String, Object>of("document", "12345678901", "kind", "cpf");
 		var reordered = Map.<String, Object>of("kind", "cpf", "document", "12345678901");
@@ -39,7 +41,7 @@ class ProviderCacheRepositoryTest {
 		assertFalse(cache.store("tenant-a", "p1", "lookup", params, data, now));
 		assertTrue(cache.find("tenant-a", "p1", "lookup", params).isEmpty());
 
-		repo.savePolicy(new ProviderCachePolicy("tenant-a", "p1", "lookup", "LOW_VOLATILITY", 60, false, null, null, null));
+		repo.savePolicy(new ProviderCachePolicy("tenant-a", "p1", "lookup", "LOW_VOLATILITY", 60, false, null, null, null), "tester");
 		assertTrue(cache.store("tenant-a", "p1", "lookup", params, data, now));
 		var hit = cache.find("tenant-a", "p1", "lookup", reordered).orElseThrow();
 		assertEquals(data, hit.response());

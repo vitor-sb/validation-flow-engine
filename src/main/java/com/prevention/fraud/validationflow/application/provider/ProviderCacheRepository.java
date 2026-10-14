@@ -1,5 +1,6 @@
 package com.prevention.fraud.validationflow.application.provider;
 
+import java.util.List;
 import java.util.Optional;
 
 /** Port; every operation is scoped by tenant and provider. */
@@ -12,6 +13,9 @@ public interface ProviderCacheRepository {
 
 	Optional<ProviderCachePolicy> findPolicy(String tenantId, String providerKey, String operation);
 
-	void savePolicy(ProviderCachePolicy policy);
+	List<ProviderCachePolicy> findPolicies(String tenantId, String providerKey);
+
+	/** Writes the policy and an audit entry (actor, values) in one transaction. */
+	void savePolicy(ProviderCachePolicy policy, String actor);
 
 }

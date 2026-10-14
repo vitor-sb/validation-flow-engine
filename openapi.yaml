@@ -521,7 +521,7 @@ paths:
   /api/v1/node-types:
     get:
       description: All validator types registered in this deployment.
-      operationId: list_4
+      operationId: list_5
       responses:
         "200":
           content:
@@ -630,7 +630,7 @@ paths:
     get:
       description: "Tenant's calls, newest first, paginated (`size` 1..100). Use `status=DEAD`\
         \ for the dead letter."
-      operationId: list_3
+      operationId: list_4
       parameters:
       - in: query
         name: status
@@ -773,6 +773,80 @@ paths:
       summary: Create or replace a provider configuration
       tags:
       - Provider Configuration
+  /api/v1/providers/{providerKey}/cache-policies:
+    get:
+      description: Tenant's rows only. `ttlSeconds` is the stored value (null = category
+        default); the effective TTL is also capped by `app.providers.cache-max-ttl`.
+      operationId: list_3
+      parameters:
+      - in: path
+        name: providerKey
+        required: true
+        schema:
+          type: string
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - provider:admin
+      summary: List the provider's cache policies
+      tags:
+      - Provider Cache Policy
+  /api/v1/providers/{providerKey}/cache-policies/{operation}:
+    put:
+      description: "CUSTOM is accepted only with ttlSeconds, justification, owner\
+        \ and reviewDate (400 otherwise). Without a policy nothing is cached; REAL_TIME\
+        \ never caches. Records an audit entry."
+      operationId: put_1
+      parameters:
+      - in: path
+        name: providerKey
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: operation
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyRequest"
+        required: true
+      responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          description: Conflict
+      security:
+      - apiKey:
+        - provider:admin
+      summary: Create or replace the cache policy of an operation
+      tags:
+      - Provider Cache Policy
 components:
   responses:
     BadRequest:
@@ -1089,6 +1163,38 @@ components:
             properties:
               threshold:
                 type: number
+    PolicyRequest:
+      type: object
+      properties:
+        dataCategory:
+          type: string
+          enum:
+          - LOW_VOLATILITY
+          - MEDIUM_VOLATILITY
+          - HIGH_VOLATILITY
+          - REAL_TIME
+          - CUSTOM
+          minLength: 1
+        fallbackOnErrorAllowed:
+          type: boolean
+        justification:
+          type: string
+          maxLength: 500
+          minLength: 0
+        owner:
+          type: string
+          maxLength: 200
+          minLength: 0
+        reviewDate:
+          type: string
+          description: "ISO date, e.g. 2027-01-31"
+        ttlSeconds:
+          type: integer
+          format: int32
+          description: Optional for the default categories (their configured TTL applies);
+            required for CUSTOM
+      required:
+      - dataCategory
     ProviderConfigRequest:
       type: object
       properties:
