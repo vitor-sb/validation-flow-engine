@@ -62,3 +62,16 @@ Run 2026-10-14, same machine and `loadtest/run.sh`, levels 8 and 32 (level 8 rep
 | 32 | 531.8 | -26% | 53.9 | 91.7 | 109.0 | 0 |
 
 **Drop above 10%, recorded as a finding.** It is reproducible (two level-8 runs agree) and matches the "contaminated" numbers of the US-013 section (367-376 at 8 clients), so it is either a residual-load artefact of this setup or a real cost of the new cache lookups: the scenario's VALIDATION node (`loadtest-fake`) is not provider-backed, so the cache path should not run, but `provider_config`/`ProviderCache` beans and V6-V9 migrations are new. Not bisected; rerun on a truly idle machine per commit before acting.
+
+## Drop explained: it was the working directory, not the code (2026-10-14)
+
+Box idle (load average 1-2, nothing else running), each tree built and run separately, levels 8 / 32 (req/s):
+
+| tree | location | 8 clients | 32 clients |
+|---|---|---|---|
+| `9b331c2` (before the provider work) | `/tmp` worktree | 584.0 | 818.6 |
+| `9760ca2` (tip of this branch, US-012) | `/tmp` worktree | 614.3 / 584.6 | 791.3 / 812.3 |
+| `9760ca2` + V10 (FK + indexes) | `/tmp` worktree | 596.1 | 807.6 |
+| `9760ca2` + V10 | `/workspace` (Windows `C:` mount) | 380.0 | 525.1 |
+
+The same code loses ~35% only when built and run from `/workspace`: `loadtest/run.sh` writes `app.log` (one INFO line per node) there, and the mount is much slower than the container filesystem. The earlier "drop" findings (US-013 and US-012 sections above) were all taken in `/workspace`, so they measure the mount, not the branch; the async/cache work costs 0-2% on this scenario (within noise). **Run the load test from a path on the container filesystem** (e.g. a `git worktree` under `/tmp`). The `blks_hit` increase noted after US-013 was also measured in `/workspace` and was not re-checked.
