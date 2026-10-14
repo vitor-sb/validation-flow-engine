@@ -714,12 +714,78 @@ class ExecutionTest {
 		assertEquals("sub", rows.get(0).get("waiting_node_id"));
 		assertEquals("h", rows.get(1).get("waiting_node_id"));
 		assertEquals(rows.get(1).get("wait_deadline"), rows.get(0).get("wait_deadline"));
-		assertEquals(a.waitDeadline().toEpochMilli() / 1000, jdbc.queryForObject("SELECT extract(epoch FROM wait_deadline)::bigint FROM flow_execution WHERE id = ?", Long.class, a.id()));
+		assertEquals(a.waitDeadline().toEpochMilli() / 1000, jdbc.queryForObject("SELECT floor(extract(epoch FROM wait_deadline))::bigint FROM flow_execution WHERE id = ?", Long.class, a.id()));
 		assertEquals(rows.get(1).get("id").toString(), jdbc.queryForObject(
 				"SELECT output_data->>'childExecutionId' FROM node_execution WHERE execution_id = ? AND node_id = 'sub'",
 				String.class, rows.get(0).get("id")));
 		assertEquals("PENDING", jdbc.queryForObject(
 				"SELECT status FROM node_execution WHERE execution_id = ? AND node_id = 'sub'", String.class, a.id()));
+	}
+
+	private void pausedChain(String prefix) {
+		Map<String, Object> approval = Map.of("startNodeId", "s", "nodes", Map.of(
+				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "h"))),
+				"h", Map.of("type", "HUMAN_APPROVAL", "config", Map.of("reason", "review", "deadline", "PT1H"),
+						"transitions", List.of(Map.of("to", "e", "label", "APPROVED"), Map.of("to", "e", "label", "REJECTED"))),
+				"e", Map.of("type", "END", "config", Map.of())));
+		activate(prefix + "-c", prefix + "C", approval, List.of());
+		activate(prefix + "-b", prefix + "B", subGraph(prefix + "-c", Map.of()), List.of());
+		activate(prefix + "-a", prefix + "A", subGraph(prefix + "-b", Map.of()), List.of());
+		assertEquals(ExecutionStatus.WAITING, executions.execute("t", prefix + "-a", null, null, Map.of(), null).status());
+	}
+
+	private java.util.UUID idOf(String flowKey) {
+		return jdbc.queryForObject("SELECT id FROM flow_execution WHERE flow_key = ?", java.util.UUID.class, flowKey);
+	}
+
+	private List<String> statuses(String prefix) {
+		return jdbc.queryForList("SELECT status || ':' || coalesce(error_info->>'reason', error_info->>'code', '') "
+				+ "FROM flow_execution WHERE flow_key LIKE ? ORDER BY flow_key", String.class, prefix + "-%");
+	}
+
+	@Test
+	void cancellingEitherSideCancelsTheOtherAndAuditsBoth() {
+		pausedChain("cc1");
+		executions.cancel("t", idOf("cc1-a"), "stop", "alice");
+		assertEquals(List.of("CANCELLED:stop", "CANCELLED:PARENT_CANCELLED", "CANCELLED:PARENT_CANCELLED"), statuses("cc1"));
+		assertEquals(3, jdbc.queryForObject("SELECT count(*) FROM execution_audit_log WHERE event_type = 'EXECUTION_CANCELLED' "
+				+ "AND execution_id IN (SELECT id FROM flow_execution WHERE flow_key LIKE 'cc1-%')", Integer.class));
+		pausedChain("cc2");
+		executions.cancel("t", idOf("cc2-c"), null, "alice");
+		assertEquals(List.of("CANCELLED:CHILD_CANCELLED", "CANCELLED:CHILD_CANCELLED", "CANCELLED:"), statuses("cc2"));
+		// a finished execution is never altered
+		assertThrows(FlowException.class, () -> executions.cancel("t", idOf("cc2-a"), "again", "alice"));
+	}
+
+	@Test
+	void expiringEitherSideExpiresTheOther() {
+		pausedChain("ee1");
+		var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+		var clock = java.time.Clock.fixed(java.time.Instant.now().plusSeconds(7200), java.time.ZoneOffset.UTC);
+		var svc = new com.prevention.fraud.validationflow.application.execution.recovery.WaitExpiryService(exRepo, clock,
+				new MicrometerExecutionMetrics(meters));
+		svc.expire();
+		assertEquals(List.of("TIMED_OUT:WAIT_EXPIRED", "TIMED_OUT:WAIT_EXPIRED", "TIMED_OUT:WAIT_EXPIRED"), statuses("ee1"));
+		assertTrue(meters.counter("validation.execution.wait_expired").count() >= 3); // other tests may leave overdue rows
+		assertEquals(3, jdbc.queryForObject("SELECT count(*) FROM execution_audit_log WHERE event_type = 'EXECUTION_WAIT_EXPIRED' "
+				+ "AND execution_id IN (SELECT id FROM flow_execution WHERE flow_key LIKE 'ee1-%')", Integer.class));
+		// only the child is overdue: the parents follow it
+		pausedChain("ee2");
+		jdbc.update("UPDATE flow_execution SET wait_deadline = now() + interval '1 day' WHERE flow_key IN ('ee2-a', 'ee2-b')");
+		svc.expire();
+		assertEquals(List.of("TIMED_OUT:WAIT_EXPIRED", "TIMED_OUT:WAIT_EXPIRED", "TIMED_OUT:WAIT_EXPIRED"), statuses("ee2"));
+	}
+
+	@Test
+	void recoveryOfAbandonedChildNeverLeavesWaitingParent() {
+		pausedChain("rr");
+		// the child was resumed (RUNNING) and the JVM died before it finished
+		jdbc.update("UPDATE flow_execution SET status = 'RUNNING', started_at = now() - interval '1 day' WHERE flow_key = 'rr-c'");
+		new RecoveryService(exRepo, idemRepo, java.time.Duration.ofHours(1)).recover();
+		assertEquals(List.of("CANCELLED:CHILD_ABANDONED", "CANCELLED:CHILD_ABANDONED", "FAILED:EXECUTION_ABANDONED"), statuses("rr"));
+		assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM flow_execution p WHERE p.status = 'WAITING' AND NOT EXISTS "
+				+ "(SELECT 1 FROM flow_execution c WHERE c.parent_execution_id = p.id AND c.status = 'WAITING') "
+				+ "AND p.flow_key LIKE 'rr-%'", Integer.class));
 	}
 
 	@Test
@@ -888,6 +954,8 @@ class ExecutionTest {
 					public long count(String t) { return exRepo.count(t); }
 
 					public long countWaiting() { return exRepo.countWaiting(); }
+
+					public java.util.List<FlowExecution> findWaitingChildren(String t, java.util.UUID p) { return exRepo.findWaitingChildren(t, p); }
 
 					public void audit(String t, java.util.UUID id, String ev, String n, Map<String, Object> d) { exRepo.audit(t, id, ev, n, d); }
 

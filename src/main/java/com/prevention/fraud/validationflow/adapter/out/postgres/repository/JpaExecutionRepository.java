@@ -99,6 +99,12 @@ public class JpaExecutionRepository implements ExecutionRepository {
 	}
 
 	@Override
+	public List<FlowExecution> findWaitingChildren(String tenantId, UUID parentId) {
+		return executions.findByTenantIdAndParentExecutionIdAndStatus(tenantId, parentId, ExecutionStatus.WAITING)
+				.stream().map(ExecutionMapper::toDomain).toList();
+	}
+
+	@Override
 	public List<FlowExecution> findWaitingExpiredBefore(Instant now) {
 		return executions.findByStatusAndWaitDeadlineBefore(ExecutionStatus.WAITING, now).stream()
 				.map(ExecutionMapper::toDomain).toList();

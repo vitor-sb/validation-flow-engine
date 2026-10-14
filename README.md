@@ -25,7 +25,7 @@ O header opcional `Idempotency-Key` (escopo do tenant) evita executar a mesma va
 
 ### Nodes e pausa
 
-Além de START, END, VALIDATION, CONDITION e SUB_FLOW, o node `HUMAN_APPROVAL` (`reason`, `assignedGroup`, `deadline` ISO-8601 limitado por `app.limits.max-wait`) para a execução em `WAITING` (`POST /executions` responde 202). Exige transições com `label` `APPROVED` e `REJECTED`. `resume` segue a transição da decisão sobre o snapshot original; `cancel` só vale para `WAITING`. O job `app.wait.expiry-interval` (padrão PT1M) leva `WAITING` vencida a `TIMED_OUT` (`WAIT_EXPIRED`). Métricas: gauge `validation.execution.waiting` e contadores `validation.execution.resumed|cancelled|wait_expired`.
+Além de START, END, VALIDATION, CONDITION e SUB_FLOW, o node `HUMAN_APPROVAL` (`reason`, `assignedGroup`, `deadline` ISO-8601 limitado por `app.limits.max-wait`) para a execução em `WAITING` (`POST /executions` responde 202). Exige transições com `label` `APPROVED` e `REJECTED`. `resume` segue a transição da decisão sobre o snapshot original; `cancel` só vale para `WAITING`. O job `app.wait.expiry-interval` (padrão PT1M) leva `WAITING` vencida a `TIMED_OUT` (`WAIT_EXPIRED`). Um `SUB_FLOW` cujo filho pausa deixa o pai em `WAITING`: decida no id do filho e o pai continua; cancelar ou expirar um lado cancela/expira o outro. Métricas: gauge `validation.execution.waiting` e contadores `validation.execution.resumed|cancelled|wait_expired`.
 
 ### Validadores e provedores externos
 

@@ -36,6 +36,9 @@ public interface ExecutionRepository {
 	/** Recovery only: RUNNING executions of ALL tenants that started before the cutoff. */
 	java.util.List<FlowExecution> findRunningStartedBefore(java.time.Instant cutoff);
 
+	/** WAITING sub-flow executions started by the given parent. */
+	java.util.List<FlowExecution> findWaitingChildren(String tenantId, UUID parentId);
+
 	/** Expiry job only: WAITING executions of ALL tenants whose wait_deadline is before the given instant. */
 	java.util.List<FlowExecution> findWaitingExpiredBefore(java.time.Instant now);
 

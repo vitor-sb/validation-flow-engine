@@ -43,6 +43,8 @@ public class ExecutionService {
 
 	private final ExecutionRecorder recorder;
 
+	private final WaitCascade cascade;
+
 	private final Map<String, NodeHandler> handlers = new HashMap<>();
 
 	public ExecutionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
@@ -56,6 +58,7 @@ public class ExecutionService {
 		this.flows = flows;
 		this.repository = repository;
 		this.recorder = new ExecutionRecorder(repository, metrics);
+		this.cascade = new WaitCascade(repository);
 		handlers.forEach(h -> this.handlers.put(h.type(), h));
 		metrics.waitingGauge(repository::countWaiting);
 	}
@@ -302,6 +305,8 @@ public class ExecutionService {
 			details.put("reason", reason);
 		}
 		repository.audit(tenantId, id, "EXECUTION_CANCELLED", nodeId, details);
+		cascade.propagate(done, "EXECUTION_CANCELLED",
+				(n, up) -> n.cancel(up ? "CHILD_CANCELLED" : "PARENT_CANCELLED"), recorder.metrics()::cancelled);
 		return done;
 	}
 

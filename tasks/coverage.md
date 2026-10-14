@@ -13,6 +13,7 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 ### RF-08 (HUMAN_APPROVAL) e RF-12 (retomar/cancelar): OK
 - Node `HUMAN_APPROVAL` pausa em `WAITING`; `POST /executions/{id}/resume` e `/cancel`; job de expiração (`WAIT_EXPIRED`).
 - Métricas: gauge `validation.execution.waiting`, contadores `validation.execution.resumed|cancelled|wait_expired`.
+- `SUB_FLOW` com filho em espera: o pai fica `WAITING` (`SUB_FLOW_WAITING`); decidir no filho continua o pai. Cancelar ou expirar um lado cancela/expira o outro em cascata (`CHILD_CANCELLED`, `PARENT_CANCELLED`, `WAIT_EXPIRED`), auditado nos dois; a recuperação de um filho abandonado cancela o pai (`CHILD_ABANDONED`). Os contadores contam cada execução afetada.
 - Testes: `ExecutionTest` (resume, cancel, expiração, métricas).
 
 ## Critérios do v0.1 (seção 15)

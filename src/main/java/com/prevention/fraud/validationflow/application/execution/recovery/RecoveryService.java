@@ -2,6 +2,7 @@ package com.prevention.fraud.validationflow.application.execution.recovery;
 
 import com.prevention.fraud.validationflow.application.execution.ports.ExecutionRepository;
 import com.prevention.fraud.validationflow.application.execution.ports.IdempotencyRepository;
+import com.prevention.fraud.validationflow.application.execution.WaitCascade;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -17,10 +18,13 @@ public class RecoveryService {
 
 	private final Duration staleAfter;
 
+	private final WaitCascade cascade;
+
 	public RecoveryService(ExecutionRepository repository, IdempotencyRepository idempotency, Duration staleAfter) {
 		this.repository = repository;
 		this.idempotency = idempotency;
 		this.staleAfter = staleAfter;
+		this.cascade = new WaitCascade(repository);
 	}
 
 	/** Returns how many executions were marked FAILED. */
@@ -32,6 +36,8 @@ public class RecoveryService {
 			if (repository.update(f)) {
 				repository.audit(ex.tenantId(), ex.id(), "EXECUTION_ABANDONED", null,
 						Map.of("staleAfter", staleAfter.toString()));
+				// a parent parked on this sub-flow would wait forever for a child that is gone
+				cascade.propagate(f, "EXECUTION_CANCELLED", (n, up) -> n.cancel("CHILD_ABANDONED"), () -> { });
 				failed++;
 			}
 		}

@@ -31,6 +31,8 @@ public interface FlowExecutionJpaRepository extends JpaRepository<FlowExecutionE
 
 	long countByStatus(ExecutionStatus status);
 
+	List<FlowExecutionEntity> findByTenantIdAndParentExecutionIdAndStatus(String tenantId, UUID parentExecutionId, ExecutionStatus status);
+
 	List<FlowExecutionEntity> findByStatusAndWaitDeadlineBefore(ExecutionStatus status, Instant cutoff);
 
 	/** Optimistic lock by hand: matches only the stored lock_version, and bumps it. */
