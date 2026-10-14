@@ -320,7 +320,14 @@ class ExecutionTest {
 				.defaults(new ValidatorRegistry(List.of(FAKE)), new ValidatorRunner(new MicrometerExecutionMetrics(meters), 4, 4),
 						new com.prevention.fraud.validationflow.application.execution.node.SubFlowRunner(flows)));
 		handlers.add(new com.prevention.fraud.validationflow.application.execution.node.NodeHandlers.ExternalCall(
-				Map.of("fake-async", fake), providers, callRepo));
+				Map.of("fake-async", fake), providers, callRepo,
+				// mock repository: no policy, so nothing is cached and this test keeps its sync/async semantics
+				new com.prevention.fraud.validationflow.application.provider.ProviderCache(
+						org.mockito.Mockito.mock(com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository.class),
+						new com.prevention.fraud.validationflow.application.provider.CachePolicyService(
+								org.mockito.Mockito.mock(com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository.class),
+								Map.of(), java.time.Duration.ofDays(1)),
+						java.time.Duration.ofMinutes(5))));
 		var svc = new ExecutionService(flows, exRepo, handlers, new MicrometerExecutionMetrics(meters));
 		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
 				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "x"))),

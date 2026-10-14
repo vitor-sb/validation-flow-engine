@@ -15,6 +15,7 @@ import com.prevention.fraud.validationflow.application.execution.node.SubFlowRun
 import com.prevention.fraud.validationflow.application.flow.FlowService;
 import com.prevention.fraud.validationflow.application.provider.CachePolicyService;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderCache;
 import com.prevention.fraud.validationflow.application.provider.ProviderCacheRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderCall;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
@@ -39,7 +40,7 @@ class FlowConfig {
 	@Bean
 	ExecutionService executionService(FlowService flows, ExecutionRepository repository, ValidatorRegistry registry,
 			io.micrometer.core.instrument.MeterRegistry meters, ObjectProvider<DataProvider> providers,
-			ProviderConfigService providerConfigs, ProviderCallRepository calls,
+			ProviderConfigService providerConfigs, ProviderCallRepository calls, ProviderCache cache,
 			// caps threads stuck in validators that ignore interrupt; size to expected concurrent timed validators
 			@org.springframework.beans.factory.annotation.Value("${app.validators.max-threads:64}") int maxThreads,
 			@org.springframework.beans.factory.annotation.Value("${app.validators.queue-capacity:128}") int queueCapacity) {
@@ -47,7 +48,7 @@ class FlowConfig {
 		java.util.Map<String, DataProvider> byKey = new java.util.HashMap<>();
 		providers.orderedStream().forEach(p -> byKey.put(p.key(), p));
 		var handlers = new java.util.ArrayList<>(NodeHandlers.defaults(registry, runner, new SubFlowRunner(flows)));
-		handlers.add(new NodeHandlers.ExternalCall(byKey, providerConfigs, calls));
+		handlers.add(new NodeHandlers.ExternalCall(byKey, providerConfigs, calls, cache));
 		return new ExecutionService(flows, repository, handlers, runner.metrics());
 	}
 
@@ -59,6 +60,12 @@ class FlowConfig {
 			@org.springframework.beans.factory.annotation.Value("${app.providers.cache-max-ttl:P7D}") java.time.Duration maxTtl) {
 		return new CachePolicyService(repository, java.util.Map.of(CachePolicyService.LOW, low,
 				CachePolicyService.MEDIUM, medium, CachePolicyService.HIGH, high), maxTtl);
+	}
+
+	@Bean
+	ProviderCache providerCache(ProviderCacheRepository repository, CachePolicyService policies,
+			@org.springframework.beans.factory.annotation.Value("${app.providers.negative-cache-ttl:PT5M}") java.time.Duration negativeTtl) {
+		return new ProviderCache(repository, policies, negativeTtl);
 	}
 
 	@Bean

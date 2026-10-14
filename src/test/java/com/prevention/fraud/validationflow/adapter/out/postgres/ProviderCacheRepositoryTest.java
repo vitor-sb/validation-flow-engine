@@ -1,6 +1,8 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,25 +33,25 @@ class ProviderCacheRepositoryTest {
 	void storesOnlyWithPolicyAndIsolatesTenantAndProvider() {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
-		var cache = new ProviderCache(repo, new CachePolicyService(repo, Map.of("LOW_VOLATILITY", Duration.ofDays(1)), Duration.ofDays(7)));
+		var cache = new ProviderCache(repo, new CachePolicyService(repo, Map.of("LOW_VOLATILITY", Duration.ofDays(1)), Duration.ofDays(7)), Duration.ofMinutes(5));
 		var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 		var params = Map.<String, Object>of("document", "12345678901", "kind", "cpf");
 		var reordered = Map.<String, Object>of("kind", "cpf", "document", "12345678901");
 		var data = Map.<String, Object>of("found", true);
 
 		// no policy: nothing cached
-		assertFalse(cache.store("tenant-a", "p1", "lookup", params, data, now));
+		assertNull(cache.store("tenant-a", "p1", "lookup", params, data, now));
 		assertTrue(cache.find("tenant-a", "p1", "lookup", params).isEmpty());
 
 		repo.savePolicy(new ProviderCachePolicy("tenant-a", "p1", "lookup", "LOW_VOLATILITY", 60, false, null, null, null), "tester");
-		assertTrue(cache.store("tenant-a", "p1", "lookup", params, data, now));
+		assertNotNull(cache.store("tenant-a", "p1", "lookup", params, data, now));
 		var hit = cache.find("tenant-a", "p1", "lookup", reordered).orElseThrow();
 		assertEquals(data, hit.response());
 		assertEquals(now.plusSeconds(60), hit.validUntil());
 		assertFalse(hit.requestKey().contains("12345678901"));
 
 		// storing again replaces the entry (unique key)
-		assertTrue(cache.store("tenant-a", "p1", "lookup", params, Map.of("found", false), now.plusSeconds(5)));
+		assertNotNull(cache.store("tenant-a", "p1", "lookup", params, Map.of("found", false), now.plusSeconds(5)));
 		assertEquals(Map.of("found", false), cache.find("tenant-a", "p1", "lookup", params).orElseThrow().response());
 
 		assertTrue(cache.find("tenant-b", "p1", "lookup", params).isEmpty());

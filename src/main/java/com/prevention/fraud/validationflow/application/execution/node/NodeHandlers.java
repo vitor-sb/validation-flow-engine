@@ -3,6 +3,7 @@ package com.prevention.fraud.validationflow.application.execution.node;
 import com.prevention.fraud.validationflow.application.execution.ExecutionService;
 import com.prevention.fraud.validationflow.application.provider.CallbackHandle;
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderCache;
 import com.prevention.fraud.validationflow.application.provider.ProviderCall;
 import com.prevention.fraud.validationflow.application.provider.ProviderCallRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
@@ -143,7 +144,7 @@ public final class NodeHandlers {
 	 * records a {@code provider_call} and parks the execution until the answer arrives (callback or polling).
 	 */
 	public record ExternalCall(Map<String, DataProvider> providers, ProviderConfigService configs,
-			ProviderCallRepository calls) implements NodeHandler {
+			ProviderCallRepository calls, ProviderCache cache) implements NodeHandler {
 
 		public String type() {
 			return "EXTERNAL_CALL";
@@ -161,27 +162,32 @@ public final class NodeHandlers {
 				return fail(s, "PROVIDER_DISABLED", key + " is not enabled for this tenant", false);
 			}
 			ProviderResult r;
-			// the clear token goes to the provider only; the row keeps its hash
-			var callback = new CallbackHandle(UUID.randomUUID(), ProviderCall.newToken());
+			Instant now = Instant.now();
+			Map<String, Object> query;
+			ProviderCache.Lookup lookup;
 			try {
-				Map<String, Object> inputData = Maps.of(s.ctx().get("inputData"));
-				r = provider.start(config, ProviderBackedValidator.query(s.nodeId(), raw.get("query"), inputData), callback);
-			}
-			catch (ProviderException e) {
-				return fail(s, e.code(), e.getMessage(), e.retryable());
+				query = ProviderBackedValidator.query(s.nodeId(), raw.get("query"), Maps.of(s.ctx().get("inputData")));
+				lookup = cache.lookup(s.ex().tenantId(), key, ProviderCache.OPERATION, query, "BYPASS".equals(raw.get("cache")), now);
 			}
 			catch (ValidatorException e) {
 				return fail(s, e.code(), e.getMessage(), e.retryable());
 			}
+			if (lookup.hit()) {
+				return done(s, raw, lookup.entry().response(), lookup, null, now);
+			}
+			// the clear token goes to the provider only; the row keeps its hash
+			var callback = new CallbackHandle(UUID.randomUUID(), ProviderCall.newToken());
+			try {
+				r = provider.start(config, query, callback);
+			}
+			catch (ProviderException e) {
+				return fail(s, e.code(), e.getMessage(), e.retryable());
+			}
 			if (r instanceof ProviderResult.Done d) {
-				Map<String, Object> out = new LinkedHashMap<>(d.data());
-				out.put("success", ProviderBackedValidator.matches(raw.get("expect"), d.data()));
-				s.outputs().put(s.nodeId(), out);
-				complete(s, out, Instant.now());
-				return null;
+				String policy = cache.store(s.ex().tenantId(), key, ProviderCache.OPERATION, query, d.data(), now);
+				return done(s, raw, d.data(), lookup, policy, now);
 			}
 			var p = (ProviderResult.Pending) r;
-			Instant now = Instant.now();
 			Instant deadline = now.plus(Duration.parse((String) raw.get("maxWait")));
 			UUID callId = callback.callId();
 			calls.save(new ProviderCall(callId, s.ex().tenantId(), s.ex().id(), s.nodeId(), key, p.externalRef(), p.mode(),
@@ -189,6 +195,15 @@ public final class NodeHandlers {
 					deadline, ProviderCall.hashToken(callback.token()), now, now));
 			return s.pause("PROVIDER_PENDING", deadline,
 					Map.of("callId", callId.toString(), "providerKey", key, "mode", p.mode().name()));
+		}
+
+		private static FlowExecution done(NodeStep s, Map<String, Object> raw, Map<String, Object> data,
+				ProviderCache.Lookup lookup, String policy, Instant now) {
+			Map<String, Object> out = new LinkedHashMap<>(lookup.tag(data, policy, now));
+			out.put("success", ProviderBackedValidator.matches(raw.get("expect"), data));
+			s.outputs().put(s.nodeId(), out);
+			complete(s, out, now);
+			return null;
 		}
 
 		private static FlowExecution fail(NodeStep s, String code, String message, boolean retryable) {

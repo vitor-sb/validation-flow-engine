@@ -42,8 +42,9 @@ class ProviderConfig {
 	}
 
 	@Bean
-	ValidatorStrategy brasilApiCnpjValidator(BrasilApiCnpjProvider provider, ProviderConfigService configs) {
-		return new ProviderBackedValidator("brasilapi-cnpj", provider, configs);
+	ValidatorStrategy brasilApiCnpjValidator(BrasilApiCnpjProvider provider, ProviderConfigService configs,
+			com.prevention.fraud.validationflow.application.provider.ProviderCache cache) {
+		return new ProviderBackedValidator("brasilapi-cnpj", provider, configs, cache);
 	}
 
 	/**

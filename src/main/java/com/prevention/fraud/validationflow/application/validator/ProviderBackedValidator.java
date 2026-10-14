@@ -1,8 +1,10 @@
 package com.prevention.fraud.validationflow.application.validator;
 
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.ProviderCache;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -25,10 +27,18 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 
 	private final ProviderConfigService configs;
 
+	private final ProviderCache cache;
+
 	public ProviderBackedValidator(String key, DataProvider provider, ProviderConfigService configs) {
+		this(key, provider, configs, null);
+	}
+
+	/** {@code cache} may be null: no lookup, no {@code cacheStatus} in the output. */
+	public ProviderBackedValidator(String key, DataProvider provider, ProviderConfigService configs, ProviderCache cache) {
 		this.key = key;
 		this.provider = provider;
 		this.configs = configs;
+		this.cache = cache;
 	}
 
 	@Override
@@ -42,15 +52,27 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 				.orElseThrow(() -> new ValidatorException("PROVIDER_DISABLED", key + " is not enabled for this tenant", false));
 		Map<String, Object> params = asMap(input.config().get("params"));
 		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
+		Instant now = Instant.now();
+		var lookup = cache == null ? null : cache.lookup(input.tenantId(), provider.key(), ProviderCache.OPERATION, query,
+				"BYPASS".equals(input.config().get("cache")), now);
 		Map<String, Object> data;
-		try {
-			data = provider.fetch(config, query);
+		String policy = null;
+		if (lookup != null && lookup.hit()) {
+			data = lookup.entry().response();
 		}
-		catch (ProviderException e) {
-			throw new ValidatorException(e.code(), e.getMessage(), e.retryable());
+		else {
+			try {
+				data = provider.fetch(config, query);
+			}
+			catch (ProviderException e) {
+				throw new ValidatorException(e.code(), e.getMessage(), e.retryable());
+			}
+			if (cache != null) {
+				policy = cache.store(input.tenantId(), provider.key(), ProviderCache.OPERATION, query, data, now);
+			}
 		}
 		boolean ok = matches(params.get("expect"), data);
-		return new ValidationResult(ok, data);
+		return new ValidationResult(ok, lookup == null ? data : lookup.tag(data, policy, now));
 	}
 
 	@Override
