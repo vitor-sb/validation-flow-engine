@@ -36,6 +36,9 @@ class NodeConfigRules {
 		timeout(id, config, errors);
 		documentGroups(id, type, config, errors);
 		retryPolicy(id, config, errors);
+		if ("VALIDATION".equals(type) || "EXTERNAL_CALL".equals(type)) {
+			cacheOptions(id, config, errors);
+		}
 		if ("SUB_FLOW".equals(type)) {
 			subFlow(id, config, errors);
 		}
@@ -44,6 +47,16 @@ class NodeConfigRules {
 		}
 		if ("EXTERNAL_CALL".equals(type)) {
 			externalCall(id, config, errors);
+		}
+	}
+
+	private static void cacheOptions(String id, Map<String, Object> config, List<GraphError> errors) {
+		if (config.containsKey("operation")
+				&& !(config.get("operation") instanceof String o && o.matches("[A-Za-z0-9_.-]{1,100}"))) {
+			errors.add(err("INVALID_OPERATION", id, "operation must match [A-Za-z0-9_.-]{1,100}"));
+		}
+		if (config.containsKey("cache") && !"BYPASS".equals(config.get("cache"))) {
+			errors.add(err("INVALID_CACHE", id, "cache must be BYPASS when present"));
 		}
 	}
 

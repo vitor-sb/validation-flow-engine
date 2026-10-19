@@ -251,4 +251,26 @@ class GraphValidatorTest {
 		assertTrue(codes.apply(ok, new String[] {}).contains("MISSING_TRANSITION"));
 	}
 
+	@Test
+	void operationAndCacheRules() {
+		for (String type : List.of("VALIDATION", "EXTERNAL_CALL")) {
+			java.util.function.Function<Map<String, Object>, List<String>> codes = extra -> {
+				Map<String, Object> g = valid();
+				Map<String, Object> config = new HashMap<>(
+						type.equals("VALIDATION") ? Map.of("validatorType", "doc-check")
+								: Map.of("providerKey", "p", "query", Map.of("id", "doc"), "maxWait", "PT1H"));
+				config.putAll(extra);
+				nodes(g).put("check", node(type, config, "end"));
+				return validator.validate(g).stream().map(GraphValidator.GraphError::code).toList();
+			};
+			assertEquals(List.of(), codes.apply(Map.of("operation", "cnpj.v2-a_b", "cache", "BYPASS")), type);
+			assertEquals(List.of(), codes.apply(Map.of()), type);
+			for (Object bad : new Object[] { "", "a b", "x".repeat(101), 5 }) {
+				assertTrue(codes.apply(Map.of("operation", bad)).contains("INVALID_OPERATION"), type + bad);
+			}
+			assertTrue(codes.apply(Map.of("cache", "bypass")).contains("INVALID_CACHE"), type);
+			assertTrue(codes.apply(Map.of("cache", true)).contains("INVALID_CACHE"), type);
+		}
+	}
+
 }
