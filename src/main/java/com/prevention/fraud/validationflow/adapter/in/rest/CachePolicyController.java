@@ -39,11 +39,12 @@ class CachePolicyController {
 			"REAL_TIME", "CUSTOM" }) String dataCategory,
 			@Schema(description = "Optional for the default categories (their configured TTL applies); required for CUSTOM") Integer ttlSeconds,
 			Boolean fallbackOnErrorAllowed, @Size(max = 500) String justification, @Size(max = 200) String owner,
-			@Schema(description = "ISO date, e.g. 2027-01-31") String reviewDate) {
+			@Schema(description = "ISO date, e.g. 2027-01-31") String reviewDate,
+			@Schema(description = "Query parameters that identify a cache entry; omitted = all parameters. Non-empty, no blanks or duplicates") List<String> keyFields) {
 	}
 
 	record PolicyResponse(String operation, String dataCategory, Integer ttlSeconds, boolean fallbackOnErrorAllowed,
-			String justification, String owner, String reviewDate) {
+			String justification, String owner, String reviewDate, List<String> keyFields) {
 	}
 
 	private final CachePolicyService service;
@@ -61,7 +62,7 @@ class CachePolicyController {
 	List<PolicyResponse> list(@AuthenticationPrincipal TenantPrincipal principal, @PathVariable String providerKey) {
 		known(providerKey);
 		return service.list(principal.tenantId(), providerKey).stream().map(p -> new PolicyResponse(p.operation(),
-				p.dataCategory(), p.ttlSeconds(), p.fallbackOnErrorAllowed(), p.justification(), p.owner(), p.reviewDate() == null ? null : p.reviewDate().toString())).toList();
+				p.dataCategory(), p.ttlSeconds(), p.fallbackOnErrorAllowed(), p.justification(), p.owner(), p.reviewDate() == null ? null : p.reviewDate().toString(), p.keyFields())).toList();
 	}
 
 	@PutMapping("/{operation}")
@@ -74,13 +75,13 @@ class CachePolicyController {
 		try {
 			var review = r.reviewDate() == null ? null : LocalDate.parse(r.reviewDate());
 			service.save(new ProviderCachePolicy(principal.tenantId(), providerKey, operation, r.dataCategory(),
-					r.ttlSeconds(), Boolean.TRUE.equals(r.fallbackOnErrorAllowed()), r.justification(), r.owner(), review, null), principal.subject());
+					r.ttlSeconds(), Boolean.TRUE.equals(r.fallbackOnErrorAllowed()), r.justification(), r.owner(), review, r.keyFields()), principal.subject());
 		}
 		catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
 		}
 		return new PolicyResponse(operation, r.dataCategory(), r.ttlSeconds(), Boolean.TRUE.equals(r.fallbackOnErrorAllowed()),
-				r.justification(), r.owner(), r.reviewDate());
+				r.justification(), r.owner(), r.reviewDate(), r.keyFields());
 	}
 
 	private void known(String providerKey) {

@@ -59,7 +59,20 @@ class CachePolicyHttpTest {
 		putPolicy("ca", "/api/v1/providers/nope/cache-policies/x", "{\"dataCategory\":\"REAL_TIME\"}").andExpect(status().isNotFound());
 		mvc.perform(get(URL).header("X-API-Key", "ca")).andExpect(jsonPath("$.length()").value(1));
 
-		assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM provider_config_audit WHERE tenant_id = 'cp-a' AND actor = 'ops-a' AND event_type LIKE 'CACHE_POLICY_%'", Integer.class));
+		// keyFields: valid, omitted (null), invalid; tenant isolation
+		putPolicy("ca", URL + "/kf", "{\"dataCategory\":\"LOW_VOLATILITY\",\"keyFields\":[\"cnpj\"]}")
+				.andExpect(status().isOk()).andExpect(jsonPath("$.keyFields[0]").value("cnpj"));
+		mvc.perform(get(URL).header("X-API-Key", "ca")).andExpect(jsonPath("$[?(@.operation=='kf')].keyFields[0]").value("cnpj"));
+		mvc.perform(get(URL).header("X-API-Key", "cb")).andExpect(jsonPath("$.length()").value(0));
+		putPolicy("ca", URL + "/kf", "{\"dataCategory\":\"LOW_VOLATILITY\"}")
+				.andExpect(status().isOk()).andExpect(jsonPath("$.keyFields").doesNotExist());
+		mvc.perform(get(URL).header("X-API-Key", "ca")).andExpect(jsonPath("$[?(@.operation=='kf')].keyFields[0]").doesNotExist());
+		for (var bad : new String[] { "[]", "[\"\"]", "[\" \"]", "[\"a\",\"a\"]" }) {
+			putPolicy("ca", URL + "/kf", "{\"dataCategory\":\"LOW_VOLATILITY\",\"keyFields\":" + bad + "}").andExpect(status().isBadRequest());
+		}
+		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM provider_config_audit WHERE tenant_id = 'cp-a' AND details::text LIKE '%cnpj%'", Integer.class));
+
+		assertEquals(4, jdbc.queryForObject("SELECT count(*) FROM provider_config_audit WHERE tenant_id = 'cp-a' AND actor = 'ops-a' AND event_type LIKE 'CACHE_POLICY_%'", Integer.class));
 	}
 
 }

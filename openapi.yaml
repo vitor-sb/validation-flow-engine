@@ -1181,6 +1181,12 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+        keyFields:
+          type: array
+          description: "Query parameters that identify a cache entry; omitted = all\
+            \ parameters. Non-empty, no blanks or duplicates"
+          items:
+            type: string
         owner:
           type: string
           maxLength: 200

@@ -58,6 +58,10 @@ public class CachePolicyService {
 				|| p.reviewDate() == null)) {
 			return "CUSTOM requires ttlSeconds, justification, owner and reviewDate";
 		}
+		var keys = p.keyFields();
+		if (keys != null && (keys.isEmpty() || keys.stream().anyMatch(k -> blank(k)) || keys.stream().distinct().count() != keys.size())) {
+			return "keyFields must be non-empty, without blank or duplicated names (omit it for all parameters)";
+		}
 		return null;
 	}
 
