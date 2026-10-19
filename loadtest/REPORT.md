@@ -75,3 +75,14 @@ Box idle (load average 1-2, nothing else running), each tree built and run separ
 | `9760ca2` + V10 | `/workspace` (Windows `C:` mount) | 380.0 | 525.1 |
 
 The same code loses ~35% only when built and run from `/workspace`: `loadtest/run.sh` writes `app.log` (one INFO line per node) there, and the mount is much slower than the container filesystem. The earlier "drop" findings (US-013 and US-012 sections above) were all taken in `/workspace`, so they measure the mount, not the branch; the async/cache work costs 0-2% on this scenario (within noise). **Run the load test from a path on the container filesystem** (e.g. a `git worktree` under `/tmp`). The `blks_hit` increase noted after US-013 was also measured in `/workspace` and was not re-checked.
+
+## After operation + keyFields + normalized key (cache-operacao-e-chave, 2026-10-19)
+
+Run from a `/tmp` worktree at `e7ebbd8`, `loadtest/run.sh 8 32`, box idle (load average ~1.4, `mvn verify` finished before the run).
+
+| concurrency | req/s | vs idle baseline (584.0 / 818.6) | p50 ms | p95 ms | p99 ms | errors |
+|---|---|---|---|---|---|---|
+| 8  | 619.8 | +6.1% | 11.5 | 18.3 | 21.9 | 0 |
+| 32 | 796.7 | -2.7% | 38.5 | 61.7 | 79.2 | 0 |
+
+No drop above 10%: the difference is within run-to-run noise. The scenario's node is not provider-backed, so the new key code (`cacheKeyParams`, `keyFields`) is not exercised by this load; this only shows it adds no cost to the non-cache path.

@@ -25,8 +25,7 @@ Entregue (`prd-provedores-async-e-cache.md`, US-001..US-012 e ajustes posteriore
 
 Lacunas conhecidas:
 - **Sem adapter assíncrono real:** só a BrasilAPI (síncrona) existe; callback, polling e dead-letter foram testados com provedores falsos.
-- **Operação fixa `default`** e chave de cache com todos os parâmetros, sem normalização (CNPJ formatado e só dígitos geram entradas diferentes): `prd-cache-operacao-e-chave.md`.
-- `cache` no nó aceita qualquer valor (só `"BYPASS"` tem efeito); falha de polling não faz fallback para dado vencido.
+- Falha de polling não faz fallback para dado vencido.
 - Callback que chega depois do sweep de dead-letter (chamada já `DEAD`) recebe 409.
 - RF-13 não coberto: política versionada, `sensitivity` (criptografia/retenção por política), invalidação por evento, TTL por produto/canal/tipo de usuário, aprovação de `CUSTOM`, camada Redis.
 - Teste de carga: rodar fora de `/workspace` (ver `loadtest/REPORT.md`).
