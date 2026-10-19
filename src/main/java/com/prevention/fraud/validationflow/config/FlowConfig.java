@@ -64,8 +64,11 @@ class FlowConfig {
 
 	@Bean
 	ProviderCache providerCache(ProviderCacheRepository repository, CachePolicyService policies, ProviderMetrics metrics,
+			ObjectProvider<DataProvider> providers,
 			@org.springframework.beans.factory.annotation.Value("${app.providers.negative-cache-ttl:PT5M}") java.time.Duration negativeTtl) {
-		return new ProviderCache(repository, policies, negativeTtl, metrics);
+		java.util.Map<String, DataProvider> byKey = new java.util.HashMap<>();
+		providers.orderedStream().forEach(p -> byKey.put(p.key(), p));
+		return new ProviderCache(repository, policies, negativeTtl, metrics, byKey);
 	}
 
 	@Bean

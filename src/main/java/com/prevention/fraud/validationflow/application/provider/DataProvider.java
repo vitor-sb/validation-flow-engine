@@ -18,6 +18,11 @@ public interface DataProvider {
 	/** {@code config} is the tenant's enabled row for this provider; null columns mean the adapter's defaults. */
 	Map<String, Object> fetch(ProviderConfig config, Map<String, Object> params);
 
+	/** Parameters as they identify a cache entry, so equivalent values (e.g. a formatted and a bare document) share one. Runs before {@code keyFields} is applied. */
+	default Map<String, Object> cacheKeyParams(Map<String, Object> params) {
+		return params;
+	}
+
 	/** Starts a call. Sync providers keep the default; async ones return {@link ProviderResult.Pending}. */
 	default ProviderResult start(ProviderConfig config, Map<String, Object> params) {
 		return new ProviderResult.Done(fetch(config, params));

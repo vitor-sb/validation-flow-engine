@@ -53,6 +53,7 @@ public class ProviderCache {
 	private final CachePolicyService policies;
 	private final Duration negativeTtl;
 	private final ProviderMetrics metrics;
+	private final Map<String, DataProvider> providers;
 
 	public ProviderCache(ProviderCacheRepository repository, CachePolicyService policies, Duration negativeTtl) {
 		this(repository, policies, negativeTtl, ProviderMetrics.NONE);
@@ -60,6 +61,13 @@ public class ProviderCache {
 
 	public ProviderCache(ProviderCacheRepository repository, CachePolicyService policies, Duration negativeTtl,
 			ProviderMetrics metrics) {
+		this(repository, policies, negativeTtl, metrics, Map.of());
+	}
+
+	/** @param providers by key; each one may normalize the parameters that identify an entry ({@link DataProvider#cacheKeyParams}) */
+	public ProviderCache(ProviderCacheRepository repository, CachePolicyService policies, Duration negativeTtl,
+			ProviderMetrics metrics, Map<String, DataProvider> providers) {
+		this.providers = providers;
 		this.metrics = metrics;
 		this.repository = repository;
 		this.policies = policies;
@@ -72,10 +80,12 @@ public class ProviderCache {
 	}
 
 	/**
-	 * Hash of the parameters named by the policy's {@code keyFields} (all of them when null). Empty, with a warning
+	 * Hash of the (adapter-normalized) parameters named by the policy's {@code keyFields} (all of them when null). Empty, with a warning
 	 * naming the field (never the value), when a key field is missing: a partial key is never built.
 	 */
-	private Optional<String> keyOf(String providerKey, String operation, ProviderCachePolicy policy, Map<String, ?> params) {
+	private Optional<String> keyOf(String providerKey, String operation, ProviderCachePolicy policy, Map<String, ?> raw) {
+		var provider = providers.get(providerKey);
+		Map<String, ?> params = provider == null ? raw : provider.cacheKeyParams(new LinkedHashMap<>(raw));
 		if (policy == null || policy.keyFields() == null) {
 			return Optional.of(requestKey(params));
 		}

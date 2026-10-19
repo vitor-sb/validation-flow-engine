@@ -36,6 +36,16 @@ public class BrasilApiCnpjProvider implements DataProvider {
 	}
 
 	@Override
+	public Map<String, Object> cacheKeyParams(Map<String, Object> params) {
+		if (!(params.get("cnpj") instanceof String cnpj)) {
+			return params;
+		}
+		Map<String, Object> out = new LinkedHashMap<>(params);
+		out.put("cnpj", BrazilianDocuments.normalize(cnpj));
+		return out;
+	}
+
+	@Override
 	public Map<String, Object> fetch(ProviderConfig config, Map<String, Object> params) {
 		String cnpj = BrazilianDocuments.normalize(String.valueOf(params.get("cnpj")));
 		if (!BrazilianDocuments.isValidCnpj(cnpj)) {
