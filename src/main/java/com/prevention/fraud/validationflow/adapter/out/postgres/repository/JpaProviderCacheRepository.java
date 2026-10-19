@@ -87,6 +87,7 @@ public class JpaProviderCacheRepository implements ProviderCacheRepository {
 		e.justification = p.justification();
 		e.owner = p.owner();
 		e.reviewDate = p.reviewDate();
+		e.keyFields = p.keyFields();
 		policies.save(e);
 		var a = new ProviderConfigAuditEntity();
 		a.id = UUID.randomUUID();
@@ -102,13 +103,14 @@ public class JpaProviderCacheRepository implements ProviderCacheRepository {
 		d.put("justification", p.justification());
 		d.put("owner", p.owner());
 		d.put("reviewDate", p.reviewDate() == null ? null : p.reviewDate().toString());
+		d.put("keyFields", p.keyFields());
 		a.details = d;
 		audit.save(a);
 	}
 
 	private static ProviderCachePolicy toDomain(ProviderCachePolicyEntity e) {
 		return new ProviderCachePolicy(e.id.tenantId(), e.id.providerKey(), e.id.operation(), e.dataCategory,
-				e.ttlSeconds, e.fallbackOnErrorAllowed, e.justification, e.owner, e.reviewDate);
+				e.ttlSeconds, e.fallbackOnErrorAllowed, e.justification, e.owner, e.reviewDate, e.keyFields);
 	}
 
 }

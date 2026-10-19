@@ -82,7 +82,7 @@ class ProviderCacheFlowTest {
 		configs.save(new ProviderConfig(tenant, "fake-cache", true, null, null, null, null, null, "t", null));
 		if (withPolicy) {
 			repo.savePolicy(new ProviderCachePolicy(tenant, "fake-cache", ProviderCache.OPERATION, "LOW_VOLATILITY", 3600,
-					fallback, null, null, null), "t");
+					fallback, null, null, null, null), "t");
 		}
 	}
 
@@ -144,7 +144,7 @@ class ProviderCacheFlowTest {
 	@Test
 	void eachOperationUsesItsOwnPolicyAndDefaultStillWorks() {
 		enable("cache-op", true);
-		repo.savePolicy(new ProviderCachePolicy("cache-op", "fake-cache", "lookup", "HIGH_VOLATILITY", 60, false, null, null, null), "t");
+		repo.savePolicy(new ProviderCachePolicy("cache-op", "fake-cache", "lookup", "HIGH_VOLATILITY", 60, false, null, null, null, null), "t");
 		int base = FETCHES.get();
 		var first = run("cache-op", "d1", null, "lookup");
 		assertEquals("MISS", status(first));

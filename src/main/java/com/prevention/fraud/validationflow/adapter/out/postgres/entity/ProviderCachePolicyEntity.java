@@ -1,6 +1,10 @@
 package com.prevention.fraud.validationflow.adapter.out.postgres.entity;
 
 import java.time.LocalDate;
+import java.util.List;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -35,5 +39,9 @@ public class ProviderCachePolicyEntity {
 
 	@Column(name = "review_date")
 	public LocalDate reviewDate;
+
+	@Column(name = "key_fields")
+	@JdbcTypeCode(SqlTypes.JSON)
+	public List<String> keyFields;
 
 }

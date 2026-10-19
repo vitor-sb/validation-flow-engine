@@ -74,7 +74,7 @@ class CachePolicyController {
 		try {
 			var review = r.reviewDate() == null ? null : LocalDate.parse(r.reviewDate());
 			service.save(new ProviderCachePolicy(principal.tenantId(), providerKey, operation, r.dataCategory(),
-					r.ttlSeconds(), Boolean.TRUE.equals(r.fallbackOnErrorAllowed()), r.justification(), r.owner(), review), principal.subject());
+					r.ttlSeconds(), Boolean.TRUE.equals(r.fallbackOnErrorAllowed()), r.justification(), r.owner(), review, null), principal.subject());
 		}
 		catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());

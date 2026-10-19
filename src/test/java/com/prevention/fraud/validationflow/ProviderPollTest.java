@@ -241,7 +241,7 @@ class ProviderPollTest {
 		var f = start("poll-cache", "slow-4", true);
 		cacheRepo.savePolicy(new com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy("poll-cache", "fake-poll",
 				com.prevention.fraud.validationflow.application.provider.ProviderCache.OPERATION, "LOW_VOLATILITY", 3600, false, null, null,
-				null), "t");
+				null, null), "t");
 		var poller = poller();
 		for (int i = 0; i < 3; i++) {
 			clock.now = clock.now.plusSeconds(120);
@@ -255,7 +255,7 @@ class ProviderPollTest {
 	void asyncCompletionStoresUnderTheNodesOperation() {
 		var f = start("poll-op", "slow-4", true, "lookup");
 		cacheRepo.savePolicy(new com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy("poll-op", "fake-poll",
-				"lookup", "LOW_VOLATILITY", 3600, false, null, null, null), "t");
+				"lookup", "LOW_VOLATILITY", 3600, false, null, null, null, null), "t");
 		var poller = poller();
 		for (int i = 0; i < 3; i++) {
 			clock.now = clock.now.plusSeconds(120);

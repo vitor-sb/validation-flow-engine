@@ -26,7 +26,7 @@ class CachePolicyServiceTest {
 			Duration.ofHours(48));
 
 	private static ProviderCachePolicy policy(String category, Integer ttl, String why, String owner, LocalDate review) {
-		return new ProviderCachePolicy("t", "p", "op", category, ttl, false, why, owner, review);
+		return new ProviderCachePolicy("t", "p", "op", category, ttl, false, why, owner, review, null);
 	}
 
 	private Optional<ProviderCachePolicy> resolve(ProviderCachePolicy p) {

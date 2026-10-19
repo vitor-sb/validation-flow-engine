@@ -44,7 +44,7 @@ public class CachePolicyService {
 		var ttl = p.ttlSeconds() != null ? Duration.ofSeconds(p.ttlSeconds()) : defaultTtls.get(p.dataCategory());
 		var effective = ttl.compareTo(maxTtl) < 0 ? ttl : maxTtl;
 		return new ProviderCachePolicy(p.tenantId(), p.providerKey(), p.operation(), p.dataCategory(),
-				(int) effective.toSeconds(), p.fallbackOnErrorAllowed(), p.justification(), p.owner(), p.reviewDate());
+				(int) effective.toSeconds(), p.fallbackOnErrorAllowed(), p.justification(), p.owner(), p.reviewDate(), p.keyFields());
 	}
 
 	private static String problem(ProviderCachePolicy p) {

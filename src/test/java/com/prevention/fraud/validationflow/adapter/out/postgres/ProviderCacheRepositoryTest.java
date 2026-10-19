@@ -43,7 +43,7 @@ class ProviderCacheRepositoryTest {
 		assertNull(cache.store("tenant-a", "p1", "lookup", params, data, now));
 		assertTrue(cache.find("tenant-a", "p1", "lookup", params).isEmpty());
 
-		repo.savePolicy(new ProviderCachePolicy("tenant-a", "p1", "lookup", "LOW_VOLATILITY", 60, false, null, null, null), "tester");
+		repo.savePolicy(new ProviderCachePolicy("tenant-a", "p1", "lookup", "LOW_VOLATILITY", 60, false, null, null, null, null), "tester");
 		assertNotNull(cache.store("tenant-a", "p1", "lookup", params, data, now));
 		var hit = cache.find("tenant-a", "p1", "lookup", reordered).orElseThrow();
 		assertEquals(data, hit.response());
@@ -61,6 +61,17 @@ class ProviderCacheRepositoryTest {
 
 
 	@Test
+	void policyKeyFieldsRoundTripAndNullMeansAllParameters() {
+		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
+		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
+		repo.savePolicy(new ProviderCachePolicy("tenant-kf", "p", "all", "LOW_VOLATILITY", 60, false, null, null, null, null), "tester");
+		repo.savePolicy(new ProviderCachePolicy("tenant-kf", "p", "some", "LOW_VOLATILITY", 60, false, null, null, null,
+				java.util.List.of("document", "kind")), "tester");
+		assertNull(repo.findPolicy("tenant-kf", "p", "all").orElseThrow().keyFields());
+		assertEquals(java.util.List.of("document", "kind"), repo.findPolicy("tenant-kf", "p", "some").orElseThrow().keyFields());
+	}
+
+	@Test
 	void purgesOnlyEntriesExpiredBeforeCutoffAndCountsLookups() {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
@@ -73,7 +84,7 @@ class ProviderCacheRepositoryTest {
 		};
 		var cache = new ProviderCache(repo, new CachePolicyService(repo, Map.of("LOW_VOLATILITY", Duration.ofDays(1)), Duration.ofDays(7)), Duration.ofMinutes(5), metrics);
 		var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-		repo.savePolicy(new ProviderCachePolicy("tenant-purge", "pp", "default", "LOW_VOLATILITY", 60, false, null, null, null), "tester");
+		repo.savePolicy(new ProviderCachePolicy("tenant-purge", "pp", "default", "LOW_VOLATILITY", 60, false, null, null, null, null), "tester");
 		var old = Map.<String, Object>of("document", "old");
 		var fresh = Map.<String, Object>of("document", "fresh");
 		cache.store("tenant-purge", "pp", "default", old, Map.of("found", true), now.minus(Duration.ofDays(3)));
