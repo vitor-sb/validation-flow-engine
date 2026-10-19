@@ -161,6 +161,36 @@ class ProviderCacheFlowTest {
 	}
 
 	@Test
+	void operationEntriesAndPoliciesNeverCrossTenants() {
+		enable("cache-opa", false, true);
+		enable("cache-opb", false, true);
+		repo.savePolicy(new ProviderCachePolicy("cache-opa", "fake-cache", "lookup", "LOW_VOLATILITY", 3600, true, null, null, null, null), "t");
+		var now = Instant.now();
+		var params = Map.<String, Object>of("id", "d1");
+		cache.store("cache-opa", "fake-cache", "lookup", params, Map.of("active", true), now);
+		assertEquals("HIT", cache.lookup("cache-opa", "fake-cache", "lookup", params, false, now).status());
+
+		// tenant B has no policy for the operation: it must not read A's entry, not even as stale fallback
+		assertEquals("DISABLED", cache.lookup("cache-opb", "fake-cache", "lookup", params, false, now).status());
+		assertTrue(cache.staleFallback("cache-opb", "fake-cache", "lookup", params).isEmpty());
+		assertNull(cache.store("cache-opb", "fake-cache", "lookup", params, Map.of("active", false), now));
+
+		// tenant B with its own policy for the same operation starts empty, and its writes never reach A
+		repo.savePolicy(new ProviderCachePolicy("cache-opb", "fake-cache", "lookup", "LOW_VOLATILITY", 3600, true, null, null, null, null), "t");
+		assertEquals("MISS", cache.lookup("cache-opb", "fake-cache", "lookup", params, false, now).status());
+		assertTrue(cache.staleFallback("cache-opb", "fake-cache", "lookup", params).isEmpty());
+		cache.store("cache-opb", "fake-cache", "lookup", params, Map.of("active", false), now);
+		assertEquals(true, cache.lookup("cache-opa", "fake-cache", "lookup", params, false, now).entry().response().get("active"));
+		assertEquals(false, cache.lookup("cache-opb", "fake-cache", "lookup", params, false, now).entry().response().get("active"));
+
+		// through the node: B's first run on that operation is a MISS even though A already cached the same document
+		int base = FETCHES.get();
+		assertEquals("MISS", status(run("cache-opb", "d9", null, "lookup")));
+		assertEquals("HIT", status(run("cache-opb", "d9", null, "lookup")));
+		assertEquals(base + 1, FETCHES.get());
+	}
+
+	@Test
 	void keyFieldsSelectTheKeyAndAMissingOneDisablesTheCache() {
 		enable("cache-kf", true);
 		repo.savePolicy(new ProviderCachePolicy("cache-kf", "fake-cache", "kf", "LOW_VOLATILITY", 60, true, null, null, null,
