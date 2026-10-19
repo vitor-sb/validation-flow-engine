@@ -179,15 +179,16 @@ public final class NodeHandlers {
 			Instant now = Instant.now();
 			Map<String, Object> query;
 			ProviderCache.Lookup lookup;
+			String operation = ProviderCache.operationOf(raw);
 			try {
 				query = ProviderBackedValidator.query(s.nodeId(), raw.get("query"), Maps.of(s.ctx().get("inputData")));
-				lookup = cache.lookup(s.ex().tenantId(), key, ProviderCache.OPERATION, query, "BYPASS".equals(raw.get("cache")), now);
+				lookup = cache.lookup(s.ex().tenantId(), key, operation, query, "BYPASS".equals(raw.get("cache")), now);
 			}
 			catch (ValidatorException e) {
 				return fail(s, e.code(), e.getMessage(), e.retryable());
 			}
 			if (lookup.hit()) {
-				return done(s, raw, lookup.entry().response(), lookup, null, now, null);
+				return done(s, raw, lookup.entry().response(), lookup, operation, null, now, null);
 			}
 			// the clear token goes to the provider only; the row keeps its hash
 			var callback = new CallbackHandle(UUID.randomUUID(), ProviderCall.newToken());
@@ -195,15 +196,15 @@ public final class NodeHandlers {
 				r = provider.start(config, query, callback);
 			}
 			catch (ProviderException e) {
-				var stale = e.retryable() ? cache.staleFallback(s.ex().tenantId(), key, ProviderCache.OPERATION, query) : Optional.<ProviderCache.Lookup>empty();
+				var stale = e.retryable() ? cache.staleFallback(s.ex().tenantId(), key, operation, query) : Optional.<ProviderCache.Lookup>empty();
 				if (stale.isEmpty()) {
 					return fail(s, e.code(), e.getMessage(), e.retryable());
 				}
-				return done(s, raw, stale.get().entry().response(), stale.get(), null, now, e.code());
+				return done(s, raw, stale.get().entry().response(), stale.get(), operation, null, now, e.code());
 			}
 			if (r instanceof ProviderResult.Done d) {
-				String policy = cache.store(s.ex().tenantId(), key, ProviderCache.OPERATION, query, d.data(), now);
-				return done(s, raw, d.data(), lookup, policy, now, null);
+				String policy = cache.store(s.ex().tenantId(), key, operation, query, d.data(), now);
+				return done(s, raw, d.data(), lookup, operation, policy, now, null);
 			}
 			var p = (ProviderResult.Pending) r;
 			Instant deadline = now.plus(Duration.parse((String) raw.get("maxWait")));
@@ -216,8 +217,8 @@ public final class NodeHandlers {
 		}
 
 		private static FlowExecution done(NodeStep s, Map<String, Object> raw, Map<String, Object> data,
-				ProviderCache.Lookup lookup, String policy, Instant now, String fallbackReason) {
-			Map<String, Object> out = new LinkedHashMap<>(lookup.tag(data, policy, now));
+				ProviderCache.Lookup lookup, String operation, String policy, Instant now, String fallbackReason) {
+			Map<String, Object> out = new LinkedHashMap<>(lookup.tag(data, operation, policy, now));
 			out.put("success", ProviderBackedValidator.matches(raw.get("expect"), data));
 			if (fallbackReason != null) {
 				out.put("fallbackReason", fallbackReason);

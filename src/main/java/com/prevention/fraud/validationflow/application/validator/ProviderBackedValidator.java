@@ -54,7 +54,8 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		Map<String, Object> params = asMap(input.config().get("params"));
 		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
 		Instant now = Instant.now();
-		var lookup = cache == null ? null : cache.lookup(input.tenantId(), provider.key(), ProviderCache.OPERATION, query,
+		String operation = ProviderCache.operationOf(input.config());
+		var lookup = cache == null ? null : cache.lookup(input.tenantId(), provider.key(), operation, query,
 				"BYPASS".equals(input.config().get("cache")), now);
 		Map<String, Object> data;
 		String policy = null;
@@ -69,11 +70,11 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 				throw new ValidatorException(e.code(), e.getMessage(), e.retryable());
 			}
 			if (cache != null) {
-				policy = cache.store(input.tenantId(), provider.key(), ProviderCache.OPERATION, query, data, now);
+				policy = cache.store(input.tenantId(), provider.key(), operation, query, data, now);
 			}
 		}
 		boolean ok = matches(params.get("expect"), data);
-		return new ValidationResult(ok, lookup == null ? data : lookup.tag(data, policy, now));
+		return new ValidationResult(ok, lookup == null ? data : lookup.tag(data, operation, policy, now));
 	}
 
 	@Override
@@ -83,9 +84,10 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		}
 		Map<String, Object> params = asMap(input.config().get("params"));
 		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
-		return cache.staleFallback(input.tenantId(), provider.key(), ProviderCache.OPERATION, query).map(l -> {
+		String operation = ProviderCache.operationOf(input.config());
+		return cache.staleFallback(input.tenantId(), provider.key(), operation, query).map(l -> {
 			Map<String, Object> data = l.entry().response();
-			Map<String, Object> out = new LinkedHashMap<>(l.tag(data, null, Instant.now()));
+			Map<String, Object> out = new LinkedHashMap<>(l.tag(data, operation, null, Instant.now()));
 			out.put("fallbackReason", errorCode);
 			return new ValidationResult(matches(params.get("expect"), data), out);
 		});

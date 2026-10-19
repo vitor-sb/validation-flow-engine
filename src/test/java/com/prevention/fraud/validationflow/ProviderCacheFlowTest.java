@@ -95,16 +95,23 @@ class ProviderCacheFlowTest {
 	}
 
 	private String run(String tenant, String doc, String cacheMode) {
+		return run(tenant, doc, cacheMode, null);
+	}
+
+	private String run(String tenant, String doc, String cacheMode, String operation) {
 		Map<String, Object> config = new java.util.HashMap<>(Map.of("providerKey", "fake-cache", "query", Map.of("id", "doc"),
 				"expect", Map.of("active", true), "maxWait", "PT1H"));
 		if (cacheMode != null) {
 			config.put("cache", cacheMode);
 		}
+		if (operation != null) {
+			config.put("operation", operation);
+		}
 		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
 				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "x"))),
 				"x", Map.of("type", "EXTERNAL_CALL", "config", config, "transitions", List.of(Map.of("to", "ok"))),
 				"ok", Map.of("type", "END", "config", Map.of("decision", "APPROVED"))));
-		String ctx = "C-" + tenant + "-" + cacheMode;
+		String ctx = "C-" + tenant + "-" + cacheMode + "-" + operation;
 		var d = flows.createDraft(tenant, "t", new FlowService.CreateFlow("k-" + ctx + System.nanoTime(), "CF", ctx, "d", null, g, List.of(), null));
 		flows.activate(tenant, d.id());
 		var result = executions.execute(tenant, null, "CF", ctx, Map.of("doc", doc), null).result();
@@ -132,6 +139,24 @@ class ProviderCacheFlowTest {
 		assertEquals(base + 3, FETCHES.get());
 		assertEquals("HIT", status(run("cache-a", "d1", null)));
 		assertEquals(base + 3, FETCHES.get());
+	}
+
+	@Test
+	void eachOperationUsesItsOwnPolicyAndDefaultStillWorks() {
+		enable("cache-op", true);
+		repo.savePolicy(new ProviderCachePolicy("cache-op", "fake-cache", "lookup", "HIGH_VOLATILITY", 60, false, null, null, null), "t");
+		int base = FETCHES.get();
+		var first = run("cache-op", "d1", null, "lookup");
+		assertEquals("MISS", status(first));
+		assertTrue(first.contains("cacheOperation=lookup") && first.contains("cachePolicy=HIGH_VOLATILITY"), first);
+		assertEquals("HIT", status(run("cache-op", "d1", null, "lookup")));
+		// same query, other operation: its own entry (and policy)
+		var def = run("cache-op", "d1", null);
+		assertEquals("MISS", status(def));
+		assertTrue(def.contains("cacheOperation=default") && def.contains("cachePolicy=LOW_VOLATILITY"), def);
+		assertEquals(base + 2, FETCHES.get());
+		// an operation with no policy is not cached
+		assertEquals("DISABLED", status(run("cache-op", "d1", null, "other")));
 	}
 
 	@Test

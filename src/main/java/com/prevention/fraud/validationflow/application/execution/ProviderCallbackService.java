@@ -150,7 +150,7 @@ public class ProviderCallbackService {
 	private void storeInCache(ProviderCall call, Map<String, Object> inputData, Map<String, Object> nodeConfig, Map<String, Object> data) {
 		try {
 			var query = ProviderBackedValidator.query(call.nodeId(), nodeConfig.get("query"), inputData);
-			cache.store(call.tenantId(), call.providerKey(), ProviderCache.OPERATION, query, data, clock.instant());
+			cache.store(call.tenantId(), call.providerKey(), ProviderCache.operationOf(nodeConfig), query, data, clock.instant());
 		}
 		catch (RuntimeException e) {
 			log.warn("provider cache store skipped callId={} providerKey={} cause={}", call.id(), call.providerKey(), e.toString());

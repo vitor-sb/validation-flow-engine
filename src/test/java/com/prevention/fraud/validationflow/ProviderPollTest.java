@@ -126,11 +126,19 @@ class ProviderPollTest {
 	}
 
 	private FlowExecution start(String tenant, String ref, boolean enabled) {
+		return start(tenant, ref, enabled, null);
+	}
+
+	private FlowExecution start(String tenant, String ref, boolean enabled, String operation) {
+		var nodeConfig = new java.util.HashMap<String, Object>(Map.of("providerKey", "fake-poll", "query", Map.of("id", "doc"),
+				"expect", Map.of("active", true), "maxWait", "PT1H"));
+		if (operation != null) {
+			nodeConfig.put("operation", operation);
+		}
 		configs.save(new ProviderConfig(tenant, "fake-poll", true, null, null, null, null, null, "t", null));
 		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
 				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "x"))),
-				"x", Map.of("type", "EXTERNAL_CALL", "config", Map.of("providerKey", "fake-poll", "query", Map.of("id", "doc"),
-						"expect", Map.of("active", true), "maxWait", "PT1H"), "transitions", List.of(Map.of("to", "ok"))),
+				"x", Map.of("type", "EXTERNAL_CALL", "config", nodeConfig, "transitions", List.of(Map.of("to", "ok"))),
 				"ok", Map.of("type", "END", "config", Map.of("decision", "APPROVED"))));
 		String ctx = "P-" + ref;
 		var d = flows.createDraft(tenant, "t", new FlowService.CreateFlow("k-" + ctx, "PF", ctx, "d", null, g, List.of(), null));
@@ -241,6 +249,21 @@ class ProviderPollTest {
 		}
 		assertEquals("COMPLETED", exStatus(f));
 		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM provider_cache_entry WHERE tenant_id = 'poll-cache'", Integer.class));
+	}
+
+	@Test
+	void asyncCompletionStoresUnderTheNodesOperation() {
+		var f = start("poll-op", "slow-4", true, "lookup");
+		cacheRepo.savePolicy(new com.prevention.fraud.validationflow.application.provider.ProviderCachePolicy("poll-op", "fake-poll",
+				"lookup", "LOW_VOLATILITY", 3600, false, null, null, null), "t");
+		var poller = poller();
+		for (int i = 0; i < 3; i++) {
+			clock.now = clock.now.plusSeconds(120);
+			poller.pollDue();
+		}
+		assertEquals("COMPLETED", exStatus(f));
+		assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM provider_cache_entry WHERE tenant_id = 'poll-op' AND operation = 'lookup'",
+				Integer.class));
 	}
 
 	@Test

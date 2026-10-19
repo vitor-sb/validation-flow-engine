@@ -11,8 +11,13 @@ import com.prevention.fraud.validationflow.application.shared.CanonicalHash;
 
 public class ProviderCache {
 
-	/** Nodes have no operation concept yet: every cached call is the provider's single "default" operation. */
+	/** Operation of a node that declares none. */
 	public static final String OPERATION = "default";
+
+	/** The operation a node's config declares, or {@link #OPERATION}. */
+	public static String operationOf(Map<String, ?> nodeConfig) {
+		return nodeConfig.get("operation") instanceof String o ? o : OPERATION;
+	}
 
 	public static final String HIT = "HIT", MISS = "MISS", EXPIRED = "EXPIRED", BYPASS = "BYPASS", DISABLED = "DISABLED",
 			STALE_FALLBACK = "STALE_FALLBACK";
@@ -24,10 +29,11 @@ public class ProviderCache {
 			return HIT.equals(status);
 		}
 
-		/** Copy of {@code out} with {@code cacheStatus}, {@code cacheAgeSeconds} and (when one applied) {@code cachePolicy}. */
-		public Map<String, Object> tag(Map<String, Object> out, String policy, Instant now) {
+		/** Copy of {@code out} with {@code cacheStatus}, {@code cacheOperation}, {@code cacheAgeSeconds} and (when one applied) {@code cachePolicy}. */
+		public Map<String, Object> tag(Map<String, Object> out, String operation, String policy, Instant now) {
 			Map<String, Object> tagged = new LinkedHashMap<>(out);
 			tagged.put("cacheStatus", status);
+			tagged.put("cacheOperation", operation);
 			tagged.put("cacheAgeSeconds", entry == null ? 0 : Math.max(0, Duration.between(entry.fetchedAt(), now).toSeconds()));
 			String applied = entry != null ? entry.policyApplied() : policy;
 			if (applied != null) {
