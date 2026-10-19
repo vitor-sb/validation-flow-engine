@@ -1,6 +1,7 @@
 package com.prevention.fraud.validationflow;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -157,6 +158,30 @@ class ProviderCacheFlowTest {
 		assertEquals(base + 2, FETCHES.get());
 		// an operation with no policy is not cached
 		assertEquals("DISABLED", status(run("cache-op", "d1", null, "other")));
+	}
+
+	@Test
+	void keyFieldsSelectTheKeyAndAMissingOneDisablesTheCache() {
+		enable("cache-kf", true);
+		repo.savePolicy(new ProviderCachePolicy("cache-kf", "fake-cache", "kf", "LOW_VOLATILITY", 60, true, null, null, null,
+				List.of("id")), "t");
+		var now = Instant.now();
+		var stored = Map.<String, Object>of("id", "d1", "noise", "a");
+		assertEquals("LOW_VOLATILITY", cache.store("cache-kf", "fake-cache", "kf", stored, Map.of("active", true), now));
+		// a parameter outside keyFields does not cause a MISS
+		assertEquals("HIT", cache.lookup("cache-kf", "fake-cache", "kf", Map.of("id", "d1", "noise", "b"), false, now).status());
+		assertEquals("MISS", cache.lookup("cache-kf", "fake-cache", "kf", Map.of("id", "d2", "noise", "a"), false, now).status());
+		assertTrue(cache.staleFallback("cache-kf", "fake-cache", "kf", Map.of("id", "d1")).isPresent());
+		// missing keyField: no cache at all, nothing stored
+		var partial = Map.<String, Object>of("noise", "a");
+		assertEquals("DISABLED", cache.lookup("cache-kf", "fake-cache", "kf", partial, false, now).status());
+		assertNull(cache.store("cache-kf", "fake-cache", "kf", partial, Map.of("active", true), now));
+		assertTrue(cache.staleFallback("cache-kf", "fake-cache", "kf", partial).isEmpty());
+		// other tenant never reuses the entry
+		enable("cache-kf2", true);
+		repo.savePolicy(new ProviderCachePolicy("cache-kf2", "fake-cache", "kf", "LOW_VOLATILITY", 60, true, null, null, null,
+				List.of("id")), "t");
+		assertEquals("MISS", cache.lookup("cache-kf2", "fake-cache", "kf", stored, false, now).status());
 	}
 
 	@Test

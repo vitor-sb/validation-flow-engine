@@ -7,9 +7,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.prevention.fraud.validationflow.application.shared.CanonicalHash;
 
 public class ProviderCache {
+
+	private static final Logger log = LoggerFactory.getLogger(ProviderCache.class);
 
 	/** Operation of a node that declares none. */
 	public static final String OPERATION = "default";
@@ -66,9 +71,35 @@ public class ProviderCache {
 		return CanonicalHash.sha256(params);
 	}
 
+	/**
+	 * Hash of the parameters named by the policy's {@code keyFields} (all of them when null). Empty, with a warning
+	 * naming the field (never the value), when a key field is missing: a partial key is never built.
+	 */
+	private Optional<String> keyOf(String providerKey, String operation, ProviderCachePolicy policy, Map<String, ?> params) {
+		if (policy == null || policy.keyFields() == null) {
+			return Optional.of(requestKey(params));
+		}
+		Map<String, Object> key = new LinkedHashMap<>();
+		for (String field : policy.keyFields()) {
+			if (!params.containsKey(field)) {
+				log.warn("cache disabled for provider={} operation={}: key field '{}' is missing", providerKey, operation, field);
+				return Optional.empty();
+			}
+			key.put(field, params.get(field));
+		}
+		return Optional.of(requestKey(key));
+	}
+
 	public Optional<ProviderCacheEntry> find(String tenantId, String providerKey, String operation,
 			Map<String, ?> params) {
-		return repository.findEntry(tenantId, providerKey, operation, requestKey(params));
+		var policy = policies.resolve(tenantId, providerKey, operation).orElse(null);
+		return find(tenantId, providerKey, operation, policy, params);
+	}
+
+	private Optional<ProviderCacheEntry> find(String tenantId, String providerKey, String operation,
+			ProviderCachePolicy policy, Map<String, ?> params) {
+		return keyOf(providerKey, operation, policy, params)
+			.flatMap(k -> repository.findEntry(tenantId, providerKey, operation, k));
 	}
 
 	/** BYPASS skips the read (the fresh answer still refreshes the entry); no policy means DISABLED. */
@@ -78,10 +109,15 @@ public class ProviderCache {
 			metrics.cache(providerKey, "bypass");
 			return new Lookup(BYPASS, null);
 		}
-		if (policies.resolve(tenantId, providerKey, operation).isEmpty()) {
+		var policy = policies.resolve(tenantId, providerKey, operation);
+		if (policy.isEmpty()) {
 			return new Lookup(DISABLED, null);
 		}
-		var entry = find(tenantId, providerKey, operation, params);
+		var key = keyOf(providerKey, operation, policy.get(), params);
+		if (key.isEmpty()) {
+			return new Lookup(DISABLED, null);
+		}
+		var entry = repository.findEntry(tenantId, providerKey, operation, key.get());
 		if (entry.isEmpty()) {
 			metrics.cache(providerKey, "miss");
 			return new Lookup(MISS, null);
@@ -96,10 +132,11 @@ public class ProviderCache {
 	 * {@code fallbackOnErrorAllowed} and an entry (valid or expired) exists. The caller must record the failure reason.
 	 */
 	public Optional<Lookup> staleFallback(String tenantId, String providerKey, String operation, Map<String, ?> params) {
-		if (!policies.resolve(tenantId, providerKey, operation).filter(ProviderCachePolicy::fallbackOnErrorAllowed).isPresent()) {
+		var policy = policies.resolve(tenantId, providerKey, operation).filter(ProviderCachePolicy::fallbackOnErrorAllowed);
+		if (policy.isEmpty()) {
 			return Optional.empty();
 		}
-		return find(tenantId, providerKey, operation, params).map(e -> {
+		return find(tenantId, providerKey, operation, policy.get(), params).map(e -> {
 			metrics.cache(providerKey, "stale_fallback");
 			return new Lookup(STALE_FALLBACK, e);
 		});
@@ -116,12 +153,16 @@ public class ProviderCache {
 			return null;
 		}
 		var p = policy.get();
+		var key = keyOf(providerKey, operation, p, params);
+		if (key.isEmpty()) {
+			return null;
+		}
 		long ttl = p.ttlSeconds();
 		if (Boolean.FALSE.equals(response.get("found"))) {
 			ttl = Math.min(ttl, negativeTtl.toSeconds());
 		}
 		repository.saveEntry(new ProviderCacheEntry(UUID.randomUUID(), tenantId, providerKey, operation,
-				requestKey(params), response, p.dataCategory(), now, now.plusSeconds(ttl), p.dataCategory()));
+				key.get(), response, p.dataCategory(), now, now.plusSeconds(ttl), p.dataCategory()));
 		return p.dataCategory();
 	}
 
