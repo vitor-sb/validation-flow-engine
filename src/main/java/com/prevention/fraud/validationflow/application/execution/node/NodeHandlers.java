@@ -179,7 +179,7 @@ public final class NodeHandlers {
 			Instant now = Instant.now();
 			Map<String, Object> query;
 			ProviderCache.Lookup lookup;
-			String operation = ProviderCache.operationOf(raw);
+			String operation = ProviderCache.operationOf(raw, provider);
 			try {
 				query = ProviderBackedValidator.query(s.nodeId(), raw.get("query"), Maps.of(s.ctx().get("inputData")));
 				lookup = cache.lookup(s.ex().tenantId(), key, operation, query, "BYPASS".equals(raw.get("cache")), now);

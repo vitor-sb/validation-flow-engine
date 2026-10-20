@@ -54,7 +54,7 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		Map<String, Object> params = asMap(input.config().get("params"));
 		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
 		Instant now = Instant.now();
-		String operation = ProviderCache.operationOf(input.config());
+		String operation = ProviderCache.operationOf(input.config(), provider);
 		var lookup = cache == null ? null : cache.lookup(input.tenantId(), provider.key(), operation, query,
 				"BYPASS".equals(input.config().get("cache")), now);
 		Map<String, Object> data;
@@ -84,7 +84,7 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		}
 		Map<String, Object> params = asMap(input.config().get("params"));
 		Map<String, Object> query = query(key, params.get("query"), asMap(input.data().get("inputData")));
-		String operation = ProviderCache.operationOf(input.config());
+		String operation = ProviderCache.operationOf(input.config(), provider);
 		return cache.staleFallback(input.tenantId(), provider.key(), operation, query).map(l -> {
 			Map<String, Object> data = l.entry().response();
 			Map<String, Object> out = new LinkedHashMap<>(l.tag(data, operation, null, Instant.now()));

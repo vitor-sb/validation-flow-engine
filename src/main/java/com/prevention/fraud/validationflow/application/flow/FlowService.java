@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.OperationSpec;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
 import com.prevention.fraud.validationflow.application.validator.ValidatorRegistry;
 import com.prevention.fraud.validationflow.application.validator.ValidatorStrategy;
@@ -34,8 +36,16 @@ public class FlowService {
 		this(repository, graphValidator, null, null);
 	}
 
+	private final Map<String, DataProvider> dataProviders;
+
 	public FlowService(FlowRepository repository, GraphValidator graphValidator, ValidatorRegistry validators,
 			ProviderConfigService providers) {
+		this(repository, graphValidator, validators, providers, Map.of());
+	}
+
+	public FlowService(FlowRepository repository, GraphValidator graphValidator, ValidatorRegistry validators,
+			ProviderConfigService providers, Map<String, DataProvider> dataProviders) {
+		this.dataProviders = dataProviders;
 		this.repository = repository;
 		this.graphValidator = graphValidator;
 		this.validators = validators;
@@ -62,6 +72,73 @@ public class FlowService {
 			}
 		});
 		return out;
+	}
+
+	/**
+	 * OPERATION_REQUIRED / UNKNOWN_OPERATION / MISSING_PARAMETER / UNKNOWN_PARAMETER for provider-backed nodes. A provider
+	 * with one operation makes {@code operation} optional; with several it is required and never falls back to default.
+	 * The node's {@code query} lives in {@code config.params.query} (VALIDATION) or {@code config.query} (EXTERNAL_CALL).
+	 */
+	@SuppressWarnings("unchecked")
+	public List<GraphValidator.GraphError> operationProblems(Map<String, Object> graph) {
+		List<GraphValidator.GraphError> out = new java.util.ArrayList<>();
+		if (validators == null || !(graph.get("nodes") instanceof Map<?, ?> nodes)) {
+			return out;
+		}
+		((Map<String, Map<String, Object>>) nodes).forEach((nodeId, node) -> {
+			if (!(node.get("config") instanceof Map<?, ?> rawCfg)) {
+				return;
+			}
+			Map<String, Object> cfg = (Map<String, Object>) rawCfg;
+			boolean external = "EXTERNAL_CALL".equals(node.get("type"));
+			Optional<String> key = external ? Optional.ofNullable((String) cfg.get("providerKey"))
+					: Optional.ofNullable((String) cfg.get("validatorType")).flatMap(validators::find)
+							.map(ValidatorStrategy::providerKey);
+			DataProvider provider = key.map(dataProviders::get).orElse(null);
+			if (provider == null) {
+				return;
+			}
+			Object queryCfg = external ? cfg.get("query")
+					: cfg.get("params") instanceof Map<?, ?> p ? p.get("query") : null;
+			operationProblem(provider, cfg.get("operation"), queryCfg instanceof Map<?, ?> q ? q.keySet() : java.util.Set.of())
+					.ifPresent(m -> out.add(new GraphValidator.GraphError(m.substring(0, m.indexOf(' ')), nodeId,
+							m.substring(m.indexOf(' ') + 1))));
+		});
+		return out;
+	}
+
+	/** "CODE message" for the first problem, or empty. */
+	private static Optional<String> operationProblem(DataProvider provider, Object requested, java.util.Set<?> params) {
+		List<OperationSpec> ops = provider.operations();
+		List<String> keys = ops.stream().map(OperationSpec::key).toList();
+		OperationSpec op;
+		if (requested == null) {
+			if (ops.size() != 1) {
+				return Optional.of("OPERATION_REQUIRED provider " + provider.key() + " has several operations: " + keys);
+			}
+			op = ops.get(0);
+		}
+		else {
+			op = ops.stream().filter(o -> o.key().equals(requested)).findFirst().orElse(null);
+			if (op == null) {
+				return Optional.of("UNKNOWN_OPERATION provider " + provider.key() + " has no operation '" + requested
+						+ "', valid: " + keys);
+			}
+		}
+		if (op.anyParams()) {
+			return Optional.empty();
+		}
+		for (String r : op.required()) {
+			if (!params.contains(r)) {
+				return Optional.of("MISSING_PARAMETER operation " + op.key() + " requires parameter '" + r + "'");
+			}
+		}
+		for (Object p : params) {
+			if (!op.required().contains(p) && !op.optional().contains(p)) {
+				return Optional.of("UNKNOWN_PARAMETER operation " + op.key() + " does not accept parameter '" + p + "'");
+			}
+		}
+		return Optional.empty();
 	}
 
 	// ponytail: version = max+1 read then insert; a concurrent create of the same key hits the unique constraint (409 via RestExceptionHandler). Retry server-side if clients need it hidden.
@@ -138,6 +215,10 @@ public class FlowService {
 		List<GraphValidator.GraphError> disabled = disabledProviders(tenantId, f.graphDefinition());
 		if (!disabled.isEmpty()) {
 			throw FlowException.conflict("flow uses disabled providers", disabled);
+		}
+		List<GraphValidator.GraphError> operations = operationProblems(f.graphDefinition());
+		if (!operations.isEmpty()) {
+			throw FlowException.invalid(operations);
 		}
 		if (!repository.activate(tenantId, id)) {
 			throw FlowException.conflict("flow is no longer a draft");

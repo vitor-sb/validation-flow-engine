@@ -53,6 +53,16 @@ class ProviderCacheFlowTest {
 					}
 					return Map.of("active", true);
 				}
+
+				@Override
+				public java.util.List<com.prevention.fraud.validationflow.application.provider.OperationSpec> operations() {
+					// two operations: nodes must name one (`default` is the legacy one)
+					return java.util.List.of(com.prevention.fraud.validationflow.application.provider.OperationSpec.legacy(),
+							new com.prevention.fraud.validationflow.application.provider.OperationSpec("lookup",
+									java.util.Set.of(), java.util.Set.of(), true),
+							new com.prevention.fraud.validationflow.application.provider.OperationSpec("other",
+									java.util.Set.of(), java.util.Set.of(), true));
+				}
 			};
 		}
 	}
@@ -105,9 +115,7 @@ class ProviderCacheFlowTest {
 		if (cacheMode != null) {
 			config.put("cache", cacheMode);
 		}
-		if (operation != null) {
-			config.put("operation", operation);
-		}
+		config.put("operation", operation == null ? "default" : operation);
 		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
 				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "x"))),
 				"x", Map.of("type", "EXTERNAL_CALL", "config", config, "transitions", List.of(Map.of("to", "ok"))),

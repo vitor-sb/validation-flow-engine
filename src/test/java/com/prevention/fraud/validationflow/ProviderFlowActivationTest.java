@@ -25,7 +25,7 @@ class ProviderFlowActivationTest {
 
 	private static final String GRAPH = """
 			{"startNodeId":"s","nodes":{"s":{"type":"START","transitions":[{"to":"v"}]},
-			"v":{"type":"VALIDATION","config":{"validatorType":"brasilapi-cnpj"},"transitions":[{"to":"e"}]},
+			"v":{"type":"VALIDATION","config":{"validatorType":"brasilapi-cnpj","params":{"query":{"cnpj":"companyCnpj"}}},"transitions":[{"to":"e"}]},
 			"e":{"type":"END"}}}""";
 
 	@Autowired

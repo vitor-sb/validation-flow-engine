@@ -33,8 +33,10 @@ class FlowConfig {
 
 	@Bean
 	FlowService flowService(FlowRepository repository, GraphValidator graphValidator, ValidatorRegistry registry,
-			com.prevention.fraud.validationflow.application.provider.ProviderConfigService providers) {
-		return new FlowService(repository, graphValidator, registry, providers);
+			com.prevention.fraud.validationflow.application.provider.ProviderConfigService providers,
+			ObjectProvider<DataProvider> dataProviders) {
+		return new FlowService(repository, graphValidator, registry, providers,
+				dataProviders.orderedStream().collect(java.util.stream.Collectors.toMap(DataProvider::key, p -> p)));
 	}
 
 	@Bean

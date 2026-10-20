@@ -56,6 +56,14 @@ class ProviderPollTest {
 					return new ProviderResult.Pending((String) p.get("id"), ProviderResult.Mode.POLL, Duration.ofSeconds(10));
 				}
 
+				@Override
+				public java.util.List<com.prevention.fraud.validationflow.application.provider.OperationSpec> operations() {
+					// two operations: nodes must name one (`default` is the legacy one)
+					return java.util.List.of(com.prevention.fraud.validationflow.application.provider.OperationSpec.legacy(),
+							new com.prevention.fraud.validationflow.application.provider.OperationSpec("lookup",
+									java.util.Set.of(), java.util.Set.of(), true));
+				}
+
 				public ProviderResult poll(ProviderConfig c, String ref) {
 					int n = POLLS.merge(ref, 1, Integer::sum);
 					if (ref.startsWith("slow")) {
@@ -132,9 +140,7 @@ class ProviderPollTest {
 	private FlowExecution start(String tenant, String ref, boolean enabled, String operation) {
 		var nodeConfig = new java.util.HashMap<String, Object>(Map.of("providerKey", "fake-poll", "query", Map.of("id", "doc"),
 				"expect", Map.of("active", true), "maxWait", "PT1H"));
-		if (operation != null) {
-			nodeConfig.put("operation", operation);
-		}
+		nodeConfig.put("operation", operation == null ? "default" : operation);
 		configs.save(new ProviderConfig(tenant, "fake-poll", true, null, null, null, null, null, "t", null));
 		Map<String, Object> g = Map.of("startNodeId", "s", "nodes", Map.of(
 				"s", Map.of("type", "START", "transitions", List.of(Map.of("to", "x"))),

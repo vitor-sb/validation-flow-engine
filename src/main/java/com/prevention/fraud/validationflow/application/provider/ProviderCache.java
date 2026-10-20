@@ -3,6 +3,7 @@ package com.prevention.fraud.validationflow.application.provider;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,15 @@ public class ProviderCache {
 	/** The operation a node's config declares, or {@link #OPERATION}. */
 	public static String operationOf(Map<String, ?> nodeConfig) {
 		return nodeConfig.get("operation") instanceof String o ? o : OPERATION;
+	}
+
+	/** Like {@link #operationOf(Map)}, but a node without {@code operation} resolves to the provider's only operation. */
+	public static String operationOf(Map<String, ?> nodeConfig, DataProvider provider) {
+		if (nodeConfig.get("operation") instanceof String o) {
+			return o;
+		}
+		List<OperationSpec> ops = provider.operations();
+		return ops.size() == 1 ? ops.get(0).key() : OPERATION;
 	}
 
 	public static final String HIT = "HIT", MISS = "MISS", EXPIRED = "EXPIRED", BYPASS = "BYPASS", DISABLED = "DISABLED",
