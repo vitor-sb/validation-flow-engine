@@ -26,6 +26,20 @@ class ArchitectureTest {
 			.allowEmptyShould(true);
 
 	@ArchTest
+	static final ArchRule productionProvidersDeclareOperations = classes().that()
+			.implement(com.prevention.fraud.validationflow.application.provider.DataProvider.class)
+			.and().areNotInterfaces()
+			.should(new com.tngtech.archunit.lang.ArchCondition<JavaClass>("override operations()") {
+				@Override
+				public void check(JavaClass c, com.tngtech.archunit.lang.ConditionEvents events) {
+					boolean declared = c.getMethods().stream().anyMatch(m -> m.getName().equals("operations"));
+					events.add(new com.tngtech.archunit.lang.SimpleConditionEvent(c, declared,
+							c.getName() + (declared ? " declares" : " does not declare") + " operations()"));
+				}
+			})
+			.allowEmptyShould(true);
+
+	@ArchTest
 	static final ArchRule applicationDoesNotDependOnAdapters = noClasses().that().resideInAPackage(BASE + ".application..")
 			.should().dependOnClassesThat().resideInAPackage(BASE + ".adapter..")
 			.allowEmptyShould(true);

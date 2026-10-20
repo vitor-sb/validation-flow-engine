@@ -64,7 +64,7 @@ public class ProviderBackedValidator implements ValidatorStrategy {
 		}
 		else {
 			try {
-				data = provider.fetch(config, query);
+				data = provider.fetch(config, operation, query);
 			}
 			catch (ProviderException e) {
 				throw new ValidatorException(e.code(), e.getMessage(), e.retryable());

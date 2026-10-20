@@ -1,5 +1,6 @@
 package com.prevention.fraud.validationflow.application.provider;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -13,6 +14,14 @@ import java.util.Map;
 public interface DataProvider {
 
 	String key();
+
+	/**
+	 * The queries this provider offers, each with its parameters. Production adapters must override it; the default is a
+	 * single legacy {@code default} operation that accepts any parameter.
+	 */
+	default List<OperationSpec> operations() {
+		return List.of(OperationSpec.legacy());
+	}
 
 	/** Returns normalized data. Keep only the fields needed for decisions: the result is persisted in the node output. */
 	/** {@code config} is the tenant's enabled row for this provider; null columns mean the adapter's defaults. */
@@ -44,6 +53,32 @@ public interface DataProvider {
 	/** Checks a pending call. Only async providers implement it. */
 	default ProviderResult poll(ProviderConfig config, String externalRef) {
 		throw new UnsupportedOperationException(key() + " is not asynchronous");
+	}
+
+	// Operation-aware variants: the engine calls these. A one-operation adapter needs no change, they delegate to the forms above.
+
+	default Map<String, Object> fetch(ProviderConfig config, String operation, Map<String, Object> params) {
+		return fetch(config, params);
+	}
+
+	default Map<String, Object> cacheKeyParams(String operation, Map<String, Object> params) {
+		return cacheKeyParams(params);
+	}
+
+	default ProviderResult start(ProviderConfig config, String operation, Map<String, Object> params) {
+		return start(config, params);
+	}
+
+	default ProviderResult start(ProviderConfig config, String operation, Map<String, Object> params, CallbackHandle callback) {
+		return start(config, params, callback);
+	}
+
+	default Map<String, Object> normalizeCallback(ProviderConfig config, String operation, Map<String, Object> body) {
+		return normalizeCallback(config, body);
+	}
+
+	default ProviderResult poll(ProviderConfig config, String operation, String externalRef) {
+		return poll(config, externalRef);
 	}
 
 }

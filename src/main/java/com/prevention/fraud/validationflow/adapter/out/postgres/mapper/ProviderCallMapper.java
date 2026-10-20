@@ -12,7 +12,7 @@ public final class ProviderCallMapper {
 	public static ProviderCall toDomain(ProviderCallEntity e) {
 		return new ProviderCall(e.id, e.tenantId, e.executionId, e.nodeId, e.providerKey, e.externalRef,
 				ProviderResult.Mode.valueOf(e.mode), ProviderCall.Status.valueOf(e.status), e.attempts, e.nextPollAt,
-				e.deadline, e.callbackTokenHash, e.createdAt, e.updatedAt, e.reason);
+				e.deadline, e.callbackTokenHash, e.createdAt, e.updatedAt, e.reason, e.operation);
 	}
 
 	public static ProviderCallEntity toEntity(ProviderCall c) {
@@ -32,6 +32,7 @@ public final class ProviderCallMapper {
 		e.createdAt = c.createdAt();
 		e.updatedAt = c.updatedAt();
 		e.reason = c.reason();
+		e.operation = c.operation();
 		return e;
 	}
 

@@ -1,11 +1,14 @@
 package com.prevention.fraud.validationflow.adapter.out.provider.brasilapi;
 
 import com.prevention.fraud.validationflow.application.provider.DataProvider;
+import com.prevention.fraud.validationflow.application.provider.OperationSpec;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfig;
 import com.prevention.fraud.validationflow.application.provider.ProviderException;
 import com.prevention.fraud.validationflow.domain.document.BrazilianDocuments;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.springframework.core.ParameterizedTypeReference;
@@ -33,6 +36,11 @@ public class BrasilApiCnpjProvider implements DataProvider {
 	@Override
 	public String key() {
 		return "brasilapi-cnpj";
+	}
+
+	@Override
+	public List<OperationSpec> operations() {
+		return List.of(new OperationSpec("cnpj", Set.of("cnpj"), Set.of()));
 	}
 
 	@Override

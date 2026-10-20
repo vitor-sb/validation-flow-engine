@@ -52,4 +52,6 @@ public class ProviderCallEntity {
 
 	public String reason;
 
+	public String operation;
+
 }

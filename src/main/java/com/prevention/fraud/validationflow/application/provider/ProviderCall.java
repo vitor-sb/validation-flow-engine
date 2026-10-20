@@ -8,16 +8,21 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
 
-/** A provider call waiting for an answer. Only the hash of the callback token is kept. */
+/**
+ * A provider call waiting for an answer. Only the hash of the callback token is kept. {@code operation} is the one it was
+ * created with: poll and callback use it even if the graph changes later.
+ */
 public record ProviderCall(UUID id, String tenantId, UUID executionId, String nodeId, String providerKey,
 		String externalRef, ProviderResult.Mode mode, Status status, int attempts, Instant nextPollAt, Instant deadline,
-		String callbackTokenHash, Instant createdAt, Instant updatedAt, String reason) {
+		String callbackTokenHash, Instant createdAt, Instant updatedAt, String reason,
+		String operation) {
 
+	/** Legacy form: no reason, the {@code default} operation. */
 	public ProviderCall(UUID id, String tenantId, UUID executionId, String nodeId, String providerKey, String externalRef,
 			ProviderResult.Mode mode, Status status, int attempts, Instant nextPollAt, Instant deadline,
 			String callbackTokenHash, Instant createdAt, Instant updatedAt) {
 		this(id, tenantId, executionId, nodeId, providerKey, externalRef, mode, status, attempts, nextPollAt, deadline,
-				callbackTokenHash, createdAt, updatedAt, null);
+				callbackTokenHash, createdAt, updatedAt, null, OperationSpec.DEFAULT);
 	}
 
 	public enum Status {
@@ -33,7 +38,7 @@ public record ProviderCall(UUID id, String tenantId, UUID executionId, String no
 	/** {@code reason} says why the call is FAILED or DEAD; null for the other states. */
 	public ProviderCall withState(Status status, int attempts, Instant nextPollAt, Instant now, String reason) {
 		return new ProviderCall(id, tenantId, executionId, nodeId, providerKey, externalRef, mode, status, attempts,
-				nextPollAt, deadline, callbackTokenHash, createdAt, now, reason);
+				nextPollAt, deadline, callbackTokenHash, createdAt, now, reason, operation);
 	}
 
 	/** A new random token; the caller hands it to the provider and must not persist it. */

@@ -193,7 +193,7 @@ public final class NodeHandlers {
 			// the clear token goes to the provider only; the row keeps its hash
 			var callback = new CallbackHandle(UUID.randomUUID(), ProviderCall.newToken());
 			try {
-				r = provider.start(config, query, callback);
+				r = provider.start(config, operation, query, callback);
 			}
 			catch (ProviderException e) {
 				var stale = e.retryable() ? cache.staleFallback(s.ex().tenantId(), key, operation, query) : Optional.<ProviderCache.Lookup>empty();
@@ -211,7 +211,7 @@ public final class NodeHandlers {
 			UUID callId = callback.callId();
 			calls.save(new ProviderCall(callId, s.ex().tenantId(), s.ex().id(), s.nodeId(), key, p.externalRef(), p.mode(),
 					ProviderCall.Status.PENDING, 0, p.mode() == ProviderResult.Mode.POLL ? now.plus(p.pollAfter()) : null,
-					deadline, ProviderCall.hashToken(callback.token()), now, now));
+					deadline, ProviderCall.hashToken(callback.token()), now, now, null, operation));
 			return s.pause("PROVIDER_PENDING", deadline,
 					Map.of("callId", callId.toString(), "providerKey", key, "mode", p.mode().name()));
 		}

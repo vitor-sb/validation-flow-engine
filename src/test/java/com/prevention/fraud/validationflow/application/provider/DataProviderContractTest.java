@@ -81,4 +81,50 @@ class DataProviderContractTest {
 		assertThatThrownBy(() -> sync.poll(CFG, "x")).isInstanceOf(UnsupportedOperationException.class);
 	}
 
+	/** Two operations; every operation-aware method answers with the operation it received. */
+	@Test
+	void engineVariantsReceiveTheOperation() {
+		DataProvider multi = new DataProvider() {
+			public String key() {
+				return "multi";
+			}
+
+			@Override
+			public java.util.List<OperationSpec> operations() {
+				return java.util.List.of(new OperationSpec("a", java.util.Set.of("x"), java.util.Set.of()),
+						new OperationSpec("b", java.util.Set.of("y"), java.util.Set.of()));
+			}
+
+			public Map<String, Object> fetch(ProviderConfig c, Map<String, Object> p) {
+				throw new AssertionError("legacy form must not be called");
+			}
+
+			@Override
+			public Map<String, Object> fetch(ProviderConfig c, String op, Map<String, Object> p) {
+				return Map.of("op", op);
+			}
+
+			@Override
+			public ProviderResult start(ProviderConfig c, String op, Map<String, Object> p, CallbackHandle cb) {
+				return new ProviderResult.Pending("ref-" + op, ProviderResult.Mode.POLL, Duration.ofSeconds(1));
+			}
+
+			@Override
+			public ProviderResult poll(ProviderConfig c, String op, String ref) {
+				return new ProviderResult.Done(Map.of("op", op));
+			}
+
+			@Override
+			public Map<String, Object> normalizeCallback(ProviderConfig c, String op, Map<String, Object> body) {
+				return Map.of("op", op);
+			}
+		};
+		var cb = new CallbackHandle(java.util.UUID.randomUUID(), "t");
+		assertThat(multi.fetch(CFG, "b", Map.of())).isEqualTo(Map.of("op", "b"));
+		assertThat(multi.start(CFG, "b", Map.of(), cb)).isEqualTo(new ProviderResult.Pending("ref-b", ProviderResult.Mode.POLL, Duration.ofSeconds(1)));
+		assertThat(multi.poll(CFG, "a", "r")).isEqualTo(new ProviderResult.Done(Map.of("op", "a")));
+		assertThat(multi.normalizeCallback(CFG, "a", Map.of())).isEqualTo(Map.of("op", "a"));
+		assertThat(FAKE.operations()).containsExactly(OperationSpec.legacy());
+	}
+
 }

@@ -73,7 +73,7 @@ public class ProviderPollService {
 		var delay = Duration.between(call.updatedAt(), now).multipliedBy(2);
 		delay = delay.compareTo(minDelay) < 0 ? minDelay : delay.compareTo(maxDelay) > 0 ? maxDelay : delay;
 		try {
-			var result = provider.poll(config, call.externalRef());
+			var result = provider.poll(config, call.operation(), call.externalRef());
 			if (result instanceof ProviderResult.Done d) {
 				completion.complete(call, d.data());
 				observe(call, "done", "COMPLETED", null);

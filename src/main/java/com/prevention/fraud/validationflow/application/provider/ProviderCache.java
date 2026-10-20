@@ -85,7 +85,7 @@ public class ProviderCache {
 	 */
 	private Optional<String> keyOf(String providerKey, String operation, ProviderCachePolicy policy, Map<String, ?> raw) {
 		var provider = providers.get(providerKey);
-		Map<String, ?> params = provider == null ? raw : provider.cacheKeyParams(new LinkedHashMap<>(raw));
+		Map<String, ?> params = provider == null ? raw : provider.cacheKeyParams(operation, new LinkedHashMap<>(raw));
 		if (policy == null || policy.keyFields() == null) {
 			return Optional.of(requestKey(params));
 		}

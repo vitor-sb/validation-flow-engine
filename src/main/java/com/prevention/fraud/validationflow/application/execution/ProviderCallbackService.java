@@ -93,7 +93,7 @@ public class ProviderCallbackService {
 		}
 		Map<String, Object> data;
 		try {
-			data = providers.get(call.providerKey()).normalizeCallback(config, body);
+			data = providers.get(call.providerKey()).normalizeCallback(config, call.operation(), body);
 		}
 		catch (ProviderException | UnsupportedOperationException e) {
 			metrics.callback(call.providerKey(), "invalid");
@@ -165,8 +165,7 @@ public class ProviderCallbackService {
 	}
 
 	private ProviderCall withStatus(ProviderCall c, ProviderCall.Status status) {
-		return new ProviderCall(c.id(), c.tenantId(), c.executionId(), c.nodeId(), c.providerKey(), c.externalRef(), c.mode(),
-				status, c.attempts(), null, c.deadline(), c.callbackTokenHash(), c.createdAt(), clock.instant());
+		return c.withState(status, c.attempts(), null, clock.instant());
 	}
 
 	private boolean signatureValid(ProviderConfig config, String signature, byte[] rawBody) {
