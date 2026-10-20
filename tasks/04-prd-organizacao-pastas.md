@@ -1,6 +1,6 @@
 # PRD: Organização de pastas (persistência e application/execution)
 
-> Executar somente depois que a migração JPA (`prd-migracao-jpa.md`) terminar, porque as duas mexem nos mesmos arquivos.
+> Executar somente depois que a migração JPA (`03-prd-migracao-jpa.md`) terminar, porque as duas mexem nos mesmos arquivos.
 > Só movimentação: nenhuma lógica muda.
 
 ## 1. Introdução

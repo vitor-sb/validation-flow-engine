@@ -1,6 +1,6 @@
 # PRD: Cache por operação e chave de consulta (RF-13, complemento)
 
-> Depende de `prd-provedores-async-e-cache.md`, **já concluído e mergeado**: usa `provider_cache_policy`, `ProviderCache`, `CachePolicyService` e a API `/providers/{providerKey}/cache-policies/{operation}`.
+> Depende de `06-prd-provedores-async-e-cache.md`, **já concluído e mergeado**: usa `provider_cache_policy`, `ProviderCache`, `CachePolicyService` e a API `/providers/{providerKey}/cache-policies/{operation}`.
 > Referência no v0.1: RF-13 (`operationKey`, `keyFields`), seção 8.6.
 
 ## 1. Introdução

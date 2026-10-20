@@ -1,6 +1,6 @@
 # PRD: Configuração de provedores no banco + pausa, retomada e cancelamento (parte 1 de 2)
 
-> Primeiro de dois PRDs. O segundo (`prd-provedores-async-e-cache.md`) depende deste: ele usa o estado `WAITING` e o `resume` criados aqui.
+> Primeiro de dois PRDs. O segundo (`06-prd-provedores-async-e-cache.md`) depende deste: ele usa o estado `WAITING` e o `resume` criados aqui.
 > Base: branch `claude/architecture-external-providers-tyqpdx` (porta `DataProvider`, `ProviderBackedValidator`, `BrasilApiCnpjProvider`). Mergear antes de começar.
 
 ## 1. Introdução

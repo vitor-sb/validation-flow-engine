@@ -1,6 +1,6 @@
 # PRD: Provedores assíncronos (callback e polling) + cache de respostas (parte 2 de 2)
 
-> Depende de `prd-provedores-config-e-pausa.md`, **já concluído e mergeado**: usa `provider_config` (`ProviderConfigService`), o estado `WAITING` (`NodeStep.pause`), `ExecutionService.resume/cancel`, a expiração (`WaitExpiryService`) e a pausa em cascata de `SUB_FLOW`.
+> Depende de `05-prd-provedores-config-e-pausa.md`, **já concluído e mergeado**: usa `provider_config` (`ProviderConfigService`), o estado `WAITING` (`NodeStep.pause`), `ExecutionService.resume/cancel`, a expiração (`WaitExpiryService`) e a pausa em cascata de `SUB_FLOW`.
 > Referências no v0.1: RF-07 (execução assíncrona), RF-13 (cache de respostas de provedores), seções 7.2 (módulo 6), 8.6 (`provider_cache_entry`) e 10.7.
 
 ## 1. Introdução

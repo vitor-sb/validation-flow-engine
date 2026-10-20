@@ -1,6 +1,6 @@
 # Rastreabilidade: v0.1 (objetivo principal) x implementação
 
-Referência: `validation-flow-engine-v0.1.md` (seção 15) e `prd-validation-flow-engine.md` (FR-1..FR-24).
+Referência: `00-v0.1-spec.md` (seção 15) e `01-prd-validation-flow-engine.md` (FR-1..FR-24).
 Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase X) | NÃO VERIFICADO.
 
 ## Lacunas do MVP
@@ -17,7 +17,7 @@ Atualizar sempre que um PRD novo for fechado. Status: OK | LACUNA | ADIADO (fase
 - Testes: `ExecutionTest` (resume, cancel, expiração, métricas).
 
 ### RF-07 (execução assíncrona) e RF-13 (cache de respostas): PARCIAL
-Entregue (`prd-provedores-async-e-cache.md`, US-001..US-012 e ajustes posteriores):
+Entregue (`06-prd-provedores-async-e-cache.md`, US-001..US-012 e ajustes posteriores):
 - Node `EXTERNAL_CALL`, contrato `DataProvider.start/poll/normalizeCallback`, tabela `provider_call` (com FK para `flow_execution`), callback autenticado por token (HMAC opcional), polling com backoff e `SKIP LOCKED`, dead-letter (`DEAD`) e reprocessamento (`POST /provider-calls/{id}/retry`).
 - Cache: `provider_cache_entry` e `provider_cache_policy`, TTL por categoria com teto `cache-max-ttl`, `REAL_TIME` sem cache, `BYPASS`, cache de `found:false` com TTL curto, fallback para dado vencido somente com permissão da política e registrado no resultado, limpeza por `valid_until`, métricas `validation.provider.*`.
 - Callback e polling também gravam no cache; uma conclusão repetida após queda entre retomar e marcar `COMPLETED` termina sem 409.
@@ -59,7 +59,7 @@ aprovação em dois níveis para ativação.
 - **Idempotência:** o claim atômico permanece em SQL nativo (`INSERT ... ON CONFLICT DO UPDATE ... WHERE`).
 - **Arquitetura:** regra ArchUnit restringe `jakarta.persistence` e `org.springframework.data` a `adapter.out.postgres`.
 
-## Operações do provedor (`prd-operacoes-do-provedor.md`): OK
+## Operações do provedor (`08-prd-operacoes-do-provedor.md`): OK
 - `DataProvider.operations()` + variantes por operação; `provider_call.operation` (V12); resolução e checagem na ativação (`OPERATION_REQUIRED`, `UNKNOWN_OPERATION`, `MISSING_PARAMETER`, `UNKNOWN_PARAMETER`); cache `default` → operação única (V13); `brasilapi` com `cnpj` e `cep`, `brasilapi-cnpj` migrado e removido (V14); catálogo `GET /node-types` com `providers`.
 - Testes: `DataProviderContractTest`, `OperationActivationTest`, `MigrationsTest`, `BrasilApiProviderTest`, `BrasilApiRenameMigrationTest`, `ValidatorRegistryTest`.
 - Lacuna: a migração V14 só reescreve o grafo de execuções não terminais; relatórios históricos mantêm `brasilapi-cnpj` em execuções terminais por decisão.

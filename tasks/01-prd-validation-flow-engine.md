@@ -1,6 +1,6 @@
 # PRD: Validation Flow Engine (MVP)
 
-> Derivado de `validation-flow-engine-v0.1.md` (v0.1). Escopo: **somente MVP** (Fases 0–2 do roadmap + sub-flow simples). Caso de uso: **genérico, sem fluxo de negócio fixo**. Backend apenas.
+> Derivado de `00-v0.1-spec.md` (v0.1). Escopo: **somente MVP** (Fases 0–2 do roadmap + sub-flow simples). Caso de uso: **genérico, sem fluxo de negócio fixo**. Backend apenas.
 
 ## 1. Introdução / Visão geral
 

@@ -1,7 +1,7 @@
 # PRD: Refatoração Clean Code / SOLID + fechamento do GAP-1 (métricas)
 
 > Terceira frente do projeto. Não entrega funcionalidade nova, exceto a US-R08 (GAP-1, ver `coverage.md`).
-> Referência do objetivo principal: `validation-flow-engine-v0.1.md`. O MVP está concluído (US-001..US-032).
+> Referência do objetivo principal: `00-v0.1-spec.md`. O MVP está concluído (US-001..US-032).
 
 ## 1. Introdução
 

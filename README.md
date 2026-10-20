@@ -2,7 +2,7 @@
 
 Motor backend para **definir, versionar e executar fluxos de validação antifraude** sem alterar código. Um sistema chamador (crédito, abertura de conta, onboarding...) envia um JSON; o motor escolhe o fluxo ativo, percorre o grafo de validações e devolve uma decisão com a trilha de auditoria.
 
-Spec de origem: [`tasks/validation-flow-engine-v0.1.md`](tasks/validation-flow-engine-v0.1.md). O que já cobre o MVP está em [`tasks/coverage.md`](tasks/coverage.md).
+Spec de origem: [`tasks/00-v0.1-spec.md`](tasks/00-v0.1-spec.md). O que já cobre o MVP está em [`tasks/coverage.md`](tasks/coverage.md).
 
 ## Como funciona
 

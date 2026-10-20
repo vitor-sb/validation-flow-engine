@@ -1,6 +1,6 @@
 # PRD: Operações declaradas pelo provedor (um provedor, várias consultas)
 
-> Depende de `prd-cache-operacao-e-chave.md`, **já concluído**: o nó declara `operation`, a política de cache é por `(tenant, provedor, operação)` e o adapter normaliza a chave com `cacheKeyParams`.
+> Depende de `07-prd-cache-operacao-e-chave.md`, **já concluído**: o nó declara `operation`, a política de cache é por `(tenant, provedor, operação)` e o adapter normaliza a chave com `cacheKeyParams`.
 > Referência no v0.1: RF-13 (`operationKey`), seção 10.7 (respostas variáveis de provedores externos).
 
 ## 1. Introdução
