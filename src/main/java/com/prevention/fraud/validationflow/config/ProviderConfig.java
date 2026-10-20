@@ -13,6 +13,7 @@ import org.springframework.web.client.RestClient;
 
 import com.prevention.fraud.validationflow.adapter.out.credential.EnvCredentialResolver;
 import com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiCnpjProvider;
+import com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiProvider;
 import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigService;
@@ -45,6 +46,17 @@ class ProviderConfig {
 	ValidatorStrategy brasilApiCnpjValidator(BrasilApiCnpjProvider provider, ProviderConfigService configs,
 			com.prevention.fraud.validationflow.application.provider.ProviderCache cache) {
 		return new ProviderBackedValidator("brasilapi-cnpj", provider, configs, cache);
+	}
+
+	@Bean
+	BrasilApiProvider brasilApiProvider() {
+		return new BrasilApiProvider(clients(BRASILAPI_URL, 2000, 5000));
+	}
+
+	@Bean
+	ValidatorStrategy brasilApiValidator(BrasilApiProvider provider, ProviderConfigService configs,
+			com.prevention.fraud.validationflow.application.provider.ProviderCache cache) {
+		return new ProviderBackedValidator("brasilapi", provider, configs, cache);
 	}
 
 	/**
