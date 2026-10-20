@@ -20,27 +20,27 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-class BrasilApiCnpjProviderTest {
+class BrasilApiCnpjOperationTest {
 
 	private static final String URL = "https://brasilapi.test/api/cnpj/v1/11222333000181";
 
-	private static final ProviderConfig CONFIG = new ProviderConfig("t", "brasilapi-cnpj", true, null, null, null, null,
+	private static final ProviderConfig CONFIG = new ProviderConfig("t", "brasilapi", true, null, null, null, null,
 			"u", Instant.EPOCH);
 
 	private MockRestServiceServer server;
 
-	private BrasilApiCnpjProvider provider;
+	private BrasilApiProvider provider;
 
 	@BeforeEach
 	void setUp() {
 		RestClient.Builder builder = RestClient.builder().baseUrl("https://brasilapi.test/api");
 		server = MockRestServiceServer.bindTo(builder).build();
 		RestClient client = builder.build();
-		provider = new BrasilApiCnpjProvider(c -> client);
+		provider = new BrasilApiProvider(c -> client);
 	}
 
 	private Map<String, Object> fetch() {
-		return provider.fetch(CONFIG, Map.of("cnpj", "11.222.333/0001-81"));
+		return provider.fetch(CONFIG, "cnpj", Map.of("cnpj", "11.222.333/0001-81"));
 	}
 
 	@Test
@@ -91,7 +91,7 @@ class BrasilApiCnpjProviderTest {
 
 	@Test
 	void rejectsInvalidCnpjWithoutCallingOut() {
-		assertThatThrownBy(() -> provider.fetch(CONFIG, Map.of("cnpj", "123"))).isInstanceOfSatisfying(ProviderException.class,
+		assertThatThrownBy(() -> provider.fetch(CONFIG, "cnpj", Map.of("cnpj", "123"))).isInstanceOfSatisfying(ProviderException.class,
 				e -> {
 					assertThat(e.code()).isEqualTo("INVALID_INPUT");
 					assertThat(e.retryable()).isFalse();

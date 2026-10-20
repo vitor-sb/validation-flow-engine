@@ -23,7 +23,7 @@ class ProviderConfigRepositoryTest {
 	static PostgreSQLContainer pg = new PostgreSQLContainer("postgres:16");
 
 	static ProviderConfig config(String tenant, boolean enabled, String url) {
-		return new ProviderConfig(tenant, "brasilapi-cnpj", enabled, url, 1000, 2000, "BRASILAPI_TOKEN", "admin",
+		return new ProviderConfig(tenant, "brasilapi", enabled, url, 1000, 2000, "BRASILAPI_TOKEN", "admin",
 				Instant.now().truncatedTo(ChronoUnit.MILLIS));
 	}
 
@@ -34,18 +34,18 @@ class ProviderConfigRepositoryTest {
 
 		var a = config("tenant-a", true, "https://a.example");
 		repo.save(a);
-		assertEquals(a, repo.find("tenant-a", "brasilapi-cnpj").orElseThrow());
+		assertEquals(a, repo.find("tenant-a", "brasilapi").orElseThrow());
 
 		var updated = config("tenant-a", false, "https://a2.example");
 		repo.save(updated);
-		assertEquals(updated, repo.find("tenant-a", "brasilapi-cnpj").orElseThrow());
+		assertEquals(updated, repo.find("tenant-a", "brasilapi").orElseThrow());
 		assertEquals(1, repo.findAll("tenant-a").size());
 
-		assertTrue(repo.find("tenant-b", "brasilapi-cnpj").isEmpty());
+		assertTrue(repo.find("tenant-b", "brasilapi").isEmpty());
 		assertTrue(repo.findAll("tenant-b").isEmpty());
 		repo.save(config("tenant-b", true, "https://b.example"));
-		assertEquals("https://a2.example", repo.find("tenant-a", "brasilapi-cnpj").orElseThrow().baseUrl());
-		assertFalse(repo.find("tenant-a", "brasilapi-cnpj").orElseThrow().enabled());
+		assertEquals("https://a2.example", repo.find("tenant-a", "brasilapi").orElseThrow().baseUrl());
+		assertFalse(repo.find("tenant-a", "brasilapi").orElseThrow().enabled());
 	}
 
 }

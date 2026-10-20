@@ -25,7 +25,7 @@ class ProviderFlowActivationTest {
 
 	private static final String GRAPH = """
 			{"startNodeId":"s","nodes":{"s":{"type":"START","transitions":[{"to":"v"}]},
-			"v":{"type":"VALIDATION","config":{"validatorType":"brasilapi-cnpj","params":{"query":{"cnpj":"companyCnpj"}}},"transitions":[{"to":"e"}]},
+			"v":{"type":"VALIDATION","config":{"validatorType":"brasilapi","operation":"cnpj","params":{"query":{"cnpj":"companyCnpj"}}},"transitions":[{"to":"e"}]},
 			"e":{"type":"END"}}}""";
 
 	@Autowired
@@ -47,7 +47,7 @@ class ProviderFlowActivationTest {
 		mvc.perform(patch("/api/v1/flows/" + id + "/activate").header("X-API-Key", "fa"))
 				.andExpect(status().isConflict()).andExpect(jsonPath("$.details[0]").value(org.hamcrest.Matchers.containsString("PROVIDER_DISABLED")));
 
-		mvc.perform(put("/api/v1/providers/brasilapi-cnpj").header("X-API-Key", "fa").contentType(MediaType.APPLICATION_JSON)
+		mvc.perform(put("/api/v1/providers/brasilapi").header("X-API-Key", "fa").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"enabled\":true}")).andExpect(status().isOk());
 
 		mvc.perform(patch("/api/v1/flows/" + id + "/activate").header("X-API-Key", "fa")).andExpect(status().isOk())

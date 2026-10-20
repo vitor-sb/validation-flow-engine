@@ -12,7 +12,6 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import com.prevention.fraud.validationflow.adapter.out.credential.EnvCredentialResolver;
-import com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiCnpjProvider;
 import com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiProvider;
 import com.prevention.fraud.validationflow.application.provider.CredentialResolver;
 import com.prevention.fraud.validationflow.application.provider.ProviderConfigRepository;
@@ -35,17 +34,6 @@ class ProviderConfig {
 	@Bean
 	CredentialResolver credentialResolver() {
 		return new EnvCredentialResolver();
-	}
-
-	@Bean
-	BrasilApiCnpjProvider brasilApiCnpjProvider() {
-		return new BrasilApiCnpjProvider(clients(BRASILAPI_URL, 2000, 5000));
-	}
-
-	@Bean
-	ValidatorStrategy brasilApiCnpjValidator(BrasilApiCnpjProvider provider, ProviderConfigService configs,
-			com.prevention.fraud.validationflow.application.provider.ProviderCache cache) {
-		return new ProviderBackedValidator("brasilapi-cnpj", provider, configs, cache);
 	}
 
 	@Bean

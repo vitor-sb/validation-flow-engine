@@ -105,16 +105,16 @@ class ProviderCacheRepositoryTest {
 	void adapterNormalizedParamsShareOneEntry() {
 		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
 		var repo = JpaTestContext.start(pg).getBean(ProviderCacheRepository.class);
-		var cnpj = new com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiCnpjProvider(c -> null);
+		var cnpj = new com.prevention.fraud.validationflow.adapter.out.provider.brasilapi.BrasilApiProvider(c -> null);
 		var cache = new ProviderCache(repo, new CachePolicyService(repo, Map.of("LOW_VOLATILITY", Duration.ofDays(1)), Duration.ofDays(7)),
 				Duration.ofMinutes(5), com.prevention.fraud.validationflow.application.provider.ProviderMetrics.NONE,
 				Map.of(cnpj.key(), cnpj));
 		var now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-		repo.savePolicy(new ProviderCachePolicy("tenant-norm", "brasilapi-cnpj", "default", "LOW_VOLATILITY", 60, false, null, null,
+		repo.savePolicy(new ProviderCachePolicy("tenant-norm", "brasilapi", "cnpj", "LOW_VOLATILITY", 60, false, null, null,
 				null, java.util.List.of("cnpj")), "tester");
-		cache.store("tenant-norm", "brasilapi-cnpj", "default", Map.of("cnpj", "11.222.333/0001-81"), Map.of("found", true), now);
-		assertEquals("HIT", cache.lookup("tenant-norm", "brasilapi-cnpj", "default", Map.of("cnpj", "11222333000181"), false, now).status());
-		assertEquals("MISS", cache.lookup("tenant-norm", "brasilapi-cnpj", "default", Map.of("cnpj", "11222333000262"), false, now).status());
+		cache.store("tenant-norm", "brasilapi", "cnpj", Map.of("cnpj", "11.222.333/0001-81"), Map.of("found", true), now);
+		assertEquals("HIT", cache.lookup("tenant-norm", "brasilapi", "cnpj", Map.of("cnpj", "11222333000181"), false, now).status());
+		assertEquals("MISS", cache.lookup("tenant-norm", "brasilapi", "cnpj", Map.of("cnpj", "11222333000262"), false, now).status());
 	}
 
 }

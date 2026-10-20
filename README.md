@@ -51,7 +51,7 @@ Validadores são beans `ValidatorStrategy` descobertos pelo registry (`GET /api/
 | Chave | Tipo | Observação |
 |---|---|---|
 | `cpf-checksum`, `cnpj-checksum` | offline | dígitos verificadores (CNPJ alfanumérico incluso) |
-| `brasilapi-cnpj` | provedor externo | consulta a BrasilAPI (gratuita, sem SLA); desligado por padrão, habilitado por tenant em `provider_config` |
+| `brasilapi` | provedor externo | consulta a BrasilAPI (operações `cnpj` e `cep`) (gratuita, sem SLA); desligado por padrão, habilitado por tenant em `provider_config` |
 
 Um **provedor** (`DataProvider`) só busca e normaliza dados. Quem decide se passa é o `ProviderBackedValidator`, configurado no node (`params.query` e `params.expect`). Timeout e retry são do motor (`ValidatorRunner`), então um provedor novo (BigDataCorp, Unico...) é um adapter em `adapter/out/provider/` mais um bean em `config/ProviderConfig`. Habilite por tenant na tabela `provider_config` (`enabled=true`).
 

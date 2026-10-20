@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.ResultActions;
 @Import(TestcontainersConfiguration.class)
 class CachePolicyHttpTest {
 
-	private static final String URL = "/api/v1/providers/brasilapi-cnpj/cache-policies";
+	private static final String URL = "/api/v1/providers/brasilapi/cache-policies";
 
 	@Autowired
 	MockMvc mvc;

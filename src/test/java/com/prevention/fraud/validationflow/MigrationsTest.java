@@ -14,6 +14,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Skipped (not failed) when Docker is absent; CI with Docker runs it.
 @Testcontainers(disabledWithoutDocker = true)
@@ -59,7 +60,7 @@ class MigrationsTest {
 			s.execute(String.format(POLICY, "t2", "brasilapi-cnpj", "cnpj", 30));
 			s.execute(String.format(POLICY, "t1", "other", "default", 40)); // untouched
 
-			Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
+			Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).target("13").load().migrate();
 
 			assertEquals("brasilapi-cnpj|t1|a|cnpj|default-a,brasilapi-cnpj|t1|b|cnpj|default-b-new,"
 					+ "brasilapi-cnpj|t1|c|cnpj|cnpj-c-new,brasilapi-cnpj|t2|a|cnpj|t2-a,other|t1|a|default|other-a",
@@ -68,6 +69,58 @@ class MigrationsTest {
 			assertEquals("brasilapi-cnpj|t1|cnpj|10,brasilapi-cnpj|t2|cnpj|30,other|t1|default|40",
 					rows(s, "SELECT provider_key||'|'||tenant_id||'|'||operation||'|'||ttl_seconds "
 							+ "FROM provider_cache_policy ORDER BY provider_key, tenant_id"));
+		}
+	}
+
+	private static String state(Statement s) throws SQLException {
+		return rows(s, "SELECT concat(tenant_id,'|',provider_key,'|',base_url) FROM provider_config ORDER BY 1")
+				+ ";" + rows(s, "SELECT concat(tenant_id,'|',provider_key,'|',ttl_seconds) FROM provider_cache_policy ORDER BY 1")
+				+ ";" + rows(s, "SELECT concat(tenant_id,'|',provider_key,'|',response->>'v') FROM provider_cache_entry ORDER BY 1")
+				+ ";" + rows(s, "SELECT provider_key FROM provider_config_audit")
+				+ ";" + rows(s, "SELECT graph_definition::text FROM flow_definition")
+				+ ";" + rows(s, "SELECT flow_snapshot::text FROM flow_execution ORDER BY flow_key");
+	}
+
+	@Test
+	void renameBrasilApiCnpjMovesEverythingAndIsIdempotent() throws Exception {
+		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).cleanDisabled(false).load().clean();
+		Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).target("13").load().migrate();
+		String old = "{\"startNodeId\":\"s\",\"nodes\":{\"v\":{\"type\":\"VALIDATION\",\"config\":{\"validatorType\":\"brasilapi-cnpj\"}},"
+				+ "\"x\":{\"type\":\"EXTERNAL_CALL\",\"config\":{\"providerKey\":\"other\"}}}}";
+		try (Connection c = DriverManager.getConnection(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword());
+				Statement s = c.createStatement()) {
+			// provider_config: t1 has both (new wins), t2 only the old one
+			s.execute("INSERT INTO provider_config (tenant_id, provider_key, enabled, base_url) VALUES "
+					+ "('t1','brasilapi-cnpj',true,'old'),('t1','brasilapi',true,'new'),('t2','brasilapi-cnpj',true,'only-old')");
+			s.execute("INSERT INTO provider_config_audit (id, tenant_id, provider_key, event_type) VALUES "
+					+ "(gen_random_uuid(),'t1','brasilapi-cnpj','CONFIG_SAVED')");
+			s.execute(String.format(POLICY, "t1", "brasilapi-cnpj", "cnpj", 10));
+			s.execute(String.format(POLICY, "t1", "brasilapi", "cnpj", 20)); // conflict: brasilapi wins
+			s.execute(String.format(POLICY, "t2", "brasilapi-cnpj", "cnpj", 30));
+			s.execute(String.format(ENTRY, "t1", "brasilapi-cnpj", "cnpj", "a", "old-a", 1));
+			s.execute(String.format(ENTRY, "t1", "brasilapi", "cnpj", "a", "new-a", 5)); // conflict: brasilapi wins, even if older
+			s.execute(String.format(ENTRY, "t2", "brasilapi-cnpj", "cnpj", "a", "t2-a", 1));
+			s.execute("INSERT INTO flow_definition (id, tenant_id, flow_key, version, status, user_type, context, display_name, "
+					+ "graph_definition, created_by) VALUES (gen_random_uuid(), 't1', 'k', 1, 'DRAFT', 'u', 'c', 'n', '" + old + "', 'me')");
+			for (String status : new String[] { "WAITING", "COMPLETED" }) {
+				s.execute("INSERT INTO flow_execution (id, tenant_id, flow_definition_id, flow_key, flow_version, flow_snapshot, status, input_data) "
+						+ "SELECT gen_random_uuid(), 't1', id, '" + status + "', 1, graph_definition, '" + status + "', '{}' FROM flow_definition");
+			}
+
+			Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()).load().migrate();
+			String first = state(s);
+			// the script itself is idempotent (Flyway would not run it twice)
+			s.execute(new String(MigrationsTest.class.getResourceAsStream("/db/migration/V14__rename_brasilapi_cnpj_to_brasilapi.sql").readAllBytes()));
+			assertEquals(first, state(s));
+			String migratedGraph = rows(s, "SELECT graph_definition::text FROM flow_definition");
+			assertTrue(migratedGraph.contains("\"validatorType\": \"brasilapi\"") && migratedGraph.contains("\"operation\": \"cnpj\""), migratedGraph);
+			assertEquals("t1|brasilapi|new,t2|brasilapi|only-old", rows(s, "SELECT concat(tenant_id,'|',provider_key,'|',base_url) FROM provider_config ORDER BY 1"));
+			assertEquals("t1|brasilapi|20,t2|brasilapi|30", rows(s, "SELECT concat(tenant_id,'|',provider_key,'|',ttl_seconds) FROM provider_cache_policy ORDER BY 1"));
+			assertEquals("t1|brasilapi|new-a,t2|brasilapi|t2-a", rows(s, "SELECT concat(tenant_id,'|',provider_key,'|',response->>'v') FROM provider_cache_entry ORDER BY 1"));
+			assertEquals("brasilapi", rows(s, "SELECT provider_key FROM provider_config_audit"));
+			// WAITING snapshot rewritten, COMPLETED left as it was
+			assertTrue(rows(s, "SELECT flow_snapshot::text FROM flow_execution WHERE status = 'WAITING'").contains("\"operation\": \"cnpj\""));
+			assertTrue(rows(s, "SELECT flow_snapshot::text FROM flow_execution WHERE status = 'COMPLETED'").contains("brasilapi-cnpj"));
 		}
 	}
 

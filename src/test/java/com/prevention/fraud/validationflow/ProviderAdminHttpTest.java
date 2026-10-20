@@ -27,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestcontainersConfiguration.class)
 class ProviderAdminHttpTest {
 
-	private static final String URL = "/api/v1/providers/brasilapi-cnpj";
+	private static final String URL = "/api/v1/providers/brasilapi";
 
 	@Autowired
 	MockMvc mvc;
@@ -49,13 +49,13 @@ class ProviderAdminHttpTest {
 		mvc.perform(get("/api/v1/providers")).andExpect(status().isUnauthorized());
 
 		// disabled until configured, then the same process sees the change at once (cache invalidated)
-		org.junit.jupiter.api.Assertions.assertTrue(configs.resolve("pa-t", "brasilapi-cnpj").isEmpty());
+		org.junit.jupiter.api.Assertions.assertTrue(configs.resolve("pa-t", "brasilapi").isEmpty());
 		putCfg("pa", URL, "{\"enabled\":true,\"baseUrl\":\"https://a.example/api\",\"connectTimeoutMs\":1000,\"credentialsRef\":\"MY_TOKEN\"}")
 				.andExpect(status().isOk()).andExpect(jsonPath("$.updatedBy").value("ops-a"))
 				.andExpect(jsonPath("$.credentialsRef").value("MY_TOKEN")).andExpect(jsonPath("$.enabled").value(true));
-		org.junit.jupiter.api.Assertions.assertTrue(configs.resolve("pa-t", "brasilapi-cnpj").isPresent());
+		org.junit.jupiter.api.Assertions.assertTrue(configs.resolve("pa-t", "brasilapi").isPresent());
 		putCfg("pa", URL, "{\"enabled\":false}").andExpect(status().isOk());
-		org.junit.jupiter.api.Assertions.assertTrue(configs.resolve("pa-t", "brasilapi-cnpj").isEmpty());
+		org.junit.jupiter.api.Assertions.assertTrue(configs.resolve("pa-t", "brasilapi").isEmpty());
 
 		// audit: one entry per change, written by the actor
 		assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM provider_config_audit WHERE tenant_id = 'pa-t' AND actor = 'ops-a'", Integer.class));
