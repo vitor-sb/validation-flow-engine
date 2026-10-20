@@ -63,3 +63,12 @@ aprovação em dois níveis para ativação.
 - `DataProvider.operations()` + variantes por operação; `provider_call.operation` (V12); resolução e checagem na ativação (`OPERATION_REQUIRED`, `UNKNOWN_OPERATION`, `MISSING_PARAMETER`, `UNKNOWN_PARAMETER`); cache `default` → operação única (V13); `brasilapi` com `cnpj` e `cep`, `brasilapi-cnpj` migrado e removido (V14); catálogo `GET /node-types` com `providers`.
 - Testes: `DataProviderContractTest`, `OperationActivationTest`, `MigrationsTest`, `BrasilApiProviderTest`, `BrasilApiRenameMigrationTest`, `ValidatorRegistryTest`.
 - Lacuna: a migração V14 só reescreve o grafo de execuções não terminais; relatórios históricos mantêm `brasilapi-cnpj` em execuções terminais por decisão.
+
+## Decisões do doc 00 §17 (2026-10-20)
+
+- **Sub-flow (§17.13):** versão do filho resolvida na chamada (versão ativa); `flowVersion` opcional no node para fixar.
+- **Grafo (§17.12):** DAG estrito, sem ciclos; reprocesso vira nova execução ou sub-flow.
+- **Retenção (§17.5/17.8):** configurável por tipo, desligada por padrão (padrão de `app.retention.idempotency`); prazos por ambiente.
+- **Primeiro caso de uso (§17.1):** onboarding/KYC PJ (CNPJ) com aprovação humana na divergência.
+- **Abertas:** SLO de latência e volume de pico (§17.3/17.4); broker e padrão corporativo de autenticação/eventos (§17.10/17.11).
+- **Fechadas (projeto de estudo):** não há broker nem padrão corporativo de autenticação/eventos; mantém API key por tenant, Micrometer e polling. SLO provisório (sem valor contratual), do baseline em `loadtest/REPORT.md`: fluxo leve com p95 < 120 ms a 64 clientes, vazão ≥ 500 req/s na máquina de referência, 0 erros. Revisar quando houver caso real.
