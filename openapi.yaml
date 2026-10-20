@@ -1154,6 +1154,14 @@ components:
           type: string
           description: Value to use as the node `type` in a graph
           example: DOCUMENT_CHECK
+        providers:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ProviderOperation"
+          description: Provider -> operations and parameters. A provider-backed validator
+            lists its own provider; EXTERNAL_CALL lists all; others are empty
         schema:
           type: object
           additionalProperties: {}
@@ -1260,6 +1268,28 @@ components:
           format: date-time
         updatedBy:
           type: string
+    ProviderOperation:
+      type: object
+      properties:
+        anyParams:
+          type: boolean
+          description: "Legacy `default` operation: accepts any parameter"
+        key:
+          type: string
+          example: cnpj
+        optional:
+          type: array
+          example: []
+          items:
+            type: string
+          uniqueItems: true
+        required:
+          type: array
+          example:
+          - cnpj
+          items:
+            type: string
+          uniqueItems: true
     ResumeRequest:
       type: object
       properties:

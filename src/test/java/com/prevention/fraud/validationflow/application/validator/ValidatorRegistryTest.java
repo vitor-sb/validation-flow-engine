@@ -108,6 +108,11 @@ class ValidatorRegistryTest {
 		mvc.perform(get("/api/v1/node-types").header("X-API-Key", "k"))
 				.andExpect(jsonPath("$[?(@.key=='HUMAN_APPROVAL')]").exists())
 				.andExpect(jsonPath("$[?(@.key=='EXTERNAL_CALL')]").exists());
+		mvc.perform(get("/api/v1/node-types/brasilapi").header("X-API-Key", "k")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.providers.brasilapi[?(@.key=='cnpj')].required[0]").value("cnpj"))
+				.andExpect(jsonPath("$.providers.brasilapi[?(@.key=='cep')].required[0]").value("cep"));
+		mvc.perform(get("/api/v1/node-types/EXTERNAL_CALL").header("X-API-Key", "k"))
+				.andExpect(jsonPath("$.providers.brasilapi").isArray());
 		mvc.perform(get("/api/v1/node-types/nope").header("X-API-Key", "k")).andExpect(status().isNotFound());
 	}
 

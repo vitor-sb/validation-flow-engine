@@ -86,3 +86,14 @@ Run from a `/tmp` worktree at `e7ebbd8`, `loadtest/run.sh 8 32`, box idle (load 
 | 32 | 796.7 | -2.7% | 38.5 | 61.7 | 79.2 | 0 |
 
 No drop above 10%: the difference is within run-to-run noise. The scenario's node is not provider-backed, so the new key code (`cacheKeyParams`, `keyFields`) is not exercised by this load; this only shows it adds no cost to the non-cache path.
+
+## After provider operations (operacoes-do-provedor, 2026-10-19)
+
+Run from a `/tmp` worktree at `3209978` (US-005; US-006 only touches the catalog endpoint, docs and tests), `loadtest/run.sh 8 32`, box idle (load average ~1.9, build finished).
+
+| concurrency | req/s | vs idle baseline (584.0 / 818.6) | p50 ms | p95 ms | p99 ms | errors |
+|---|---|---|---|---|---|---|
+| 8  | 612.4 | +4.9% | 11.6 | 19.5 | 23.8 | 0 |
+| 32 | 829.2 | +1.3% | 37.4 | 56.8 | 66.9 | 0 |
+
+No drop above 10%. The scenario's node is not provider-backed, so operation resolution (activation-time) and the operation-aware calls are not exercised; this only shows no cost on the non-provider path.

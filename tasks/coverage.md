@@ -58,3 +58,8 @@ aprovação em dois níveis para ativação.
 - **Lock otimista:** `flow_execution.update` continua `@Modifying` com `WHERE lock_version = ?`, sem `@Version`.
 - **Idempotência:** o claim atômico permanece em SQL nativo (`INSERT ... ON CONFLICT DO UPDATE ... WHERE`).
 - **Arquitetura:** regra ArchUnit restringe `jakarta.persistence` e `org.springframework.data` a `adapter.out.postgres`.
+
+## Operações do provedor (`prd-operacoes-do-provedor.md`): OK
+- `DataProvider.operations()` + variantes por operação; `provider_call.operation` (V12); resolução e checagem na ativação (`OPERATION_REQUIRED`, `UNKNOWN_OPERATION`, `MISSING_PARAMETER`, `UNKNOWN_PARAMETER`); cache `default` → operação única (V13); `brasilapi` com `cnpj` e `cep`, `brasilapi-cnpj` migrado e removido (V14); catálogo `GET /node-types` com `providers`.
+- Testes: `DataProviderContractTest`, `OperationActivationTest`, `MigrationsTest`, `BrasilApiProviderTest`, `BrasilApiRenameMigrationTest`, `ValidatorRegistryTest`.
+- Lacuna: a migração V14 só reescreve o grafo de execuções não terminais; relatórios históricos mantêm `brasilapi-cnpj` em execuções terminais por decisão.
