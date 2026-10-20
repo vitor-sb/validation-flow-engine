@@ -1,0 +1,7 @@
+.git
+.idea
+.claude
+target/
+.env
+k8s/
+loadtest/
