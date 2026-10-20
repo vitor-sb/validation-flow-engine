@@ -1,0 +1,14 @@
+date: 2026-10-14T01:15:55-03:00
+cpu:  AMD Ryzen 5 5600X 6-Core Processor x12
+mem_mb: 15956
+java: openjdk version "17.0.20.1" 2026-08-18 LTS
+postgres: 17.11 (Debian 17.11-1.pgdg13+2) (docker, default config)
+note: app, DB and load driver share one machine
+{"concurrency": 8, "duration_s": 30.0, "ok": 17883, "errors": {}, "throughput_rps": 596.1, "p50_ms": 11.9, "p95_ms": 19.8, "p99_ms": 26.3, "max_ms": 93.4}
+  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 70|61|426|4891 -> 170797|114556|497|35819977
+  db: 11 connections, size 48 MB
+  pg container: cpu 0.02% mem 106.9MiB / 15.58GiB
+{"concurrency": 32, "duration_s": 30.0, "ok": 24227, "errors": {}, "throughput_rps": 807.6, "p50_ms": 38.4, "p95_ms": 58.9, "p99_ms": 70.2, "max_ms": 98.2}
+  db delta (commits|rows inserted|blks_read|blks_hit, incl. warmup): 170803|114556|500|35820666 -> 421807|281869|500|38674801
+  db: 11 connections, size 108 MB
+  pg container: cpu 0.03% mem 175.7MiB / 15.58GiB

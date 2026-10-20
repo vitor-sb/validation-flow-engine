@@ -1,3 +1,28 @@
 spring:
   application:
     name: validation-flow-engine
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  pattern:
+    level: "%5p [%X{correlationId:-},%X{executionId:-},%X{flowKey:-},%X{flowVersion:-},%X{nodeId:-},%X{status:-}]"
+
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+  writer-with-order-by-keys: true

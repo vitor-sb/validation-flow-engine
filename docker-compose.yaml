@@ -1,0 +1,27 @@
+services:
+  validation_flow_db:
+    image: postgres:17-alpine
+    container_name: validation_flow_postgres_container
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    ports:
+      - "${DATABASE_PORT}:5432"
+    volumes:
+      - validation_flow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - validation_flow_network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  validation_flow_postgres_data:
+
+networks:
+  validation_flow_network:
+    driver: bridge
