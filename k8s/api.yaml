@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: validation
+spec:
+  selector: { app: api }
+  ports: [{ port: 80, targetPort: 8081 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: validation
+spec:
+  selector:
+    matchLabels: { app: api }
+  template:
+    metadata:
+      labels: { app: api }
+    spec:
+      containers:
+        - name: api
+          image: validation-flow-engine:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8081 }]
+          envFrom:
+            - secretRef: { name: validation-env }
+          # env explícito vence o envFrom: troca o host de localhost do .env pelo Service
+          env:
+            - { name: DATABASE_HOST, value: postgres }
+            - { name: DATABASE_PORT, value: "5432" }
+            # datasource, porta 8081 e API keys só existem em application-local.yaml
+            # ponytail: profile "local" em k8s; extrair para application.yaml se for deployar de verdade
+            - { name: SPRING_PROFILES_ACTIVE, value: local }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8081 }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8081 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8081 }
+            periodSeconds: 10
+          resources:
+            limits: { memory: 768Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  namespace: validation
+spec:
+  rules:
+    - host: validation.localhost
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: api, port: { number: 80 } } } }
